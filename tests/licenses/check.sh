@@ -4,8 +4,7 @@ set -eu
 repository_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repository_root"
 
-go mod download all
-module_lines=$(go list -m -f '{{if not .Main}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}' all)
+module_lines=$(GOFLAGS=-mod=readonly go list -deps -test -f '{{with .Module}}{{if not .Main}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}{{end}}' ./... | sort -u)
 missing_count=0
 while IFS='|' read -r module_name module_version module_directory; do
 	[ -n "$module_name" ] || continue
