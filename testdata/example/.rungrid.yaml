@@ -1,0 +1,46 @@
+api_version: rungrid/v1
+kind: Workspace
+project:
+  name: Example Workspace
+  slug: example-workspace
+  id: example-workspace-k7m4q2
+runtime:
+  startup_timeout: 10s
+  shutdown_timeout: 5s
+terminal:
+  mode: warp
+  open: false
+services:
+  - name: database
+    source: compose
+    activation: workspace
+    compose:
+      file: compose.yaml
+      service: database
+    health:
+      command:
+        argv: [database-ready, --quiet]
+  - name: api
+    source: native
+    activation: tab
+    working_directory: services/api
+    run:
+      argv: [go, run, ./cmd/server]
+    terminal:
+      title: API
+      trigger_argv: [make, dev]
+    depends_on:
+      database: healthy
+  - name: web
+    source: native
+    activation: tab
+    working_directory: services/web
+    run:
+      argv: [npm, run, dev]
+    terminal:
+      title: Web
+  - name: documentation
+    source: external
+    activation: workspace
+    external:
+      url: http://localhost:9000/health

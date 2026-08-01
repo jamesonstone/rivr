@@ -1,0 +1,166 @@
+package manifest
+
+func Schema() []byte {
+	return []byte(`{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rungrid/v1",
+  "title": "Rungrid workspace",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api_version", "kind", "project", "services"],
+  "properties": {
+    "api_version": {"const": "rungrid/v1"},
+    "kind": {"const": "Workspace"},
+    "project": {"$ref": "#/$defs/project"},
+    "imports": {"type": "array", "items": {"type": "string"}},
+    "runtime": {"$ref": "#/$defs/runtime"},
+    "terminal": {"$ref": "#/$defs/terminal"},
+    "services": {"type": "array", "items": {"$ref": "#/$defs/service"}}
+  },
+  "$defs": {
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {"argv": {"$ref": "#/$defs/argv"}}
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*-[a-z2-7]{6}$"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startup_timeout": {"type": "string"},
+        "shutdown_timeout": {"type": "string"},
+        "log_retention": {"type": "string"},
+        "process_compose": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "executable": {"type": "string"},
+            "log_level": {"type": "string"}
+          }
+        }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["warp", "headless"]},
+        "open": {"type": "boolean"},
+        "theme": {"type": "string"}
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["dotenv", "command", "direnv"]},
+        "path": {"type": "string"},
+        "optional": {"type": "boolean"},
+        "argv": {"$ref": "#/$defs/argv"},
+        "timeout": {"type": "string"},
+        "directory": {"type": "string"}
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {"$ref": "#/$defs/command"},
+        "url": {"type": "string", "format": "uri"},
+        "interval": {"type": "string"},
+        "timeout": {"type": "string"},
+        "retries": {"type": "integer", "minimum": 1},
+        "start_period": {"type": "string"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "source": {"enum": ["native", "compose", "external"]},
+        "activation": {"enum": ["workspace", "tab"]},
+        "working_directory": {"type": "string"},
+        "run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["argv"],
+          "properties": {"argv": {"$ref": "#/$defs/argv"}, "stdin": {"type": "boolean"}}
+        },
+        "compose": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "service"],
+          "properties": {
+            "file": {"type": "string"},
+            "project_name": {"type": "string"},
+            "service": {"type": "string"},
+            "profiles": {"type": "array", "items": {"type": "string"}},
+            "up_argv": {"$ref": "#/$defs/argv"},
+            "down_argv": {"$ref": "#/$defs/argv"}
+          }
+        },
+        "external": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"url": {"type": "string", "format": "uri"}, "command": {"$ref": "#/$defs/command"}}
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "values": {"type": "object", "additionalProperties": {"type": "string"}},
+            "providers": {"type": "array", "items": {"$ref": "#/$defs/provider"}}
+          }
+        },
+        "depends_on": {"type": "object", "additionalProperties": {"enum": ["running", "healthy", "completed_successfully"]}},
+        "health": {"$ref": "#/$defs/health"},
+        "restart": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "policy": {"enum": ["no", "always", "on-failure"]},
+            "max_restarts": {"type": "integer", "minimum": 0},
+            "backoff": {"type": "string"}
+          }
+        },
+        "namespace": {"type": "string"},
+        "terminal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {"type": "string"},
+            "trigger_argv": {"$ref": "#/$defs/argv"},
+            "include_in_versions": {"type": "boolean"}
+          }
+        },
+        "ports": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}}
+      },
+      "oneOf": [
+        {"required": ["run"]},
+        {"required": ["compose"]},
+        {"required": ["external"]}
+      ]
+    }
+  }
+}
+`)
+}

@@ -1,0 +1,28 @@
+api_version: rungrid/v1
+kind: Workspace
+project:
+  name: Headless Example
+  slug: headless-example
+  id: headless-example-r5n2w7
+runtime:
+  startup_timeout: 10s
+  shutdown_timeout: 5s
+terminal:
+  mode: headless
+  open: false
+services:
+  - name: clock
+    source: native
+    activation: workspace
+    run:
+      argv: [sh, -c, "while true; do date; sleep 1; done"]
+    health:
+      command:
+        argv: [sh, -c, "exit 0"]
+  - name: worker
+    source: native
+    activation: tab
+    run:
+      argv: [sh, -c, "while true; do echo working; sleep 1; done"]
+    terminal:
+      trigger_argv: [make, dev]
