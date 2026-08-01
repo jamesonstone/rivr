@@ -126,6 +126,11 @@ in the consumer repository, not this repository.
   MIT license file. The dependency graph pins the first licensed upstream
   revision and the repository gate rejects dependency archives without license
   or notice material.
+- Process Compose can write structured diagnostics to stderr before returning a
+  valid JSON response on stdout, notably on a minimal Linux host without an XDG
+  configuration directory. The client keeps these streams separate so
+  diagnostics cannot corrupt machine-readable state while failed command
+  output remains redacted.
 
 ## Validation record
 
@@ -143,9 +148,13 @@ Local validation completed on macOS with Process Compose 1.120.0:
   by CI/release configuration; the local snapshot skips an unavailable tool.
 - Fresh-install initialization, validation, planning, generation, and a real
   Process Compose dry run were exercised in temporary directories.
+- A Linux/arm64 container reproduction with Process Compose 1.120.0 exercised
+  workspace startup, tab-session ownership, `Disabled` to `Running` to
+  `Completed` transitions, interrupt handling, status JSON, and shutdown.
 
 The pull-request workflow includes the same Process Compose version and uploads
-immutable run evidence, but its hosted result is not observed until delivery.
+immutable run evidence. Hosted checks exposed and now cover Linux socket-path
+reporting and separation of Process Compose diagnostics from JSON responses.
 The graphical Warp smoke, signing, SBOM generation, published release, and
 consumer-workspace parity are not observed and are not passing claims.
 

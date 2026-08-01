@@ -57,6 +57,7 @@ func TestClientUsesExactUnixSocketArguments(t *testing.T) {
 	executable := filepath.Join(directory, "process-compose")
 	script := `#!/bin/sh
 printf '%s\n' "$@" > "$FAKE_PROCESS_COMPOSE_LOG"
+printf '{"level":"debug","message":"diagnostic"}\n' >&2
 printf '[{"name":"api","status":"Running","pid":42}]\n'
 `
 	if err := os.WriteFile(executable, []byte(script), 0o700); err != nil {
@@ -64,12 +65,15 @@ printf '[{"name":"api","status":"Running","pid":42}]\n'
 	}
 	t.Setenv("FAKE_PROCESS_COMPOSE_LOG", logPath)
 	client := Client{Executable: executable, Socket: "runtime.sock", LogFile: filepath.Join(directory, "client.log"), WorkDir: directory}
-	states, _, err := client.List(context.Background())
+	states, raw, err := client.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(states, []ProcessState{{Name: "api", Status: "Running", PID: 42}}) {
 		t.Fatalf("unexpected states %#v", states)
+	}
+	if string(raw) != `[{"name":"api","status":"Running","pid":42}]` {
+		t.Fatalf("stderr contaminated raw JSON: %q", raw)
 	}
 	arguments, err := os.ReadFile(logPath)
 	if err != nil {

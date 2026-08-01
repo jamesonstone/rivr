@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,8 +39,12 @@ func (c Client) command(ctx context.Context, arguments ...string) *exec.Cmd {
 
 func (c Client) Run(ctx context.Context, arguments ...string) ([]byte, error) {
 	command := c.command(ctx, arguments...)
-	output, err := command.CombinedOutput()
+	output, err := command.Output()
 	if err != nil {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			return nil, errs.Wrap(errs.ExitFailure, "RG303", fmt.Sprintf("Process Compose %s failed", strings.Join(arguments, " ")), redactedCommandError(err, append(output, exitError.Stderr...)))
+		}
 		return nil, errs.Wrap(errs.ExitFailure, "RG303", fmt.Sprintf("Process Compose %s failed", strings.Join(arguments, " ")), redactedCommandError(err, output))
 	}
 	return output, nil
