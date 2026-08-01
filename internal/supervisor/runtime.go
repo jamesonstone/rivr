@@ -123,7 +123,7 @@ func Start(ctx context.Context, options StartOptions) (result Runtime, reused bo
 	if err := waitForSocket(waitContext, socket); err != nil {
 		return Runtime{}, false, err
 	}
-	pid, err := socketPID(waitContext, configuration)
+	pid, err := socketPID(waitContext, socket, configuration)
 	if err != nil {
 		return Runtime{}, false, err
 	}
@@ -286,7 +286,7 @@ func waitForSocket(ctx context.Context, socket string) error {
 	}
 }
 
-func socketPID(ctx context.Context, configuration string) (int, error) {
+func socketPID(ctx context.Context, socket, configuration string) (int, error) {
 	output, err := exec.CommandContext(ctx, "lsof", "-nP", "-U", "-F", "pcn").Output()
 	if err != nil {
 		return 0, errs.Wrap(errs.ExitDependency, "RG626", "identify Process Compose socket owner with lsof", err)
@@ -304,7 +304,7 @@ func socketPID(ctx context.Context, configuration string) (int, error) {
 		case 'c':
 			commandName = line[1:]
 		case 'n':
-			if pid <= 1 || !strings.Contains(strings.ToLower(commandName), "process-c") || filepath.Clean(line[1:]) != filepath.Join("..", "..", "runtime.sock") {
+			if pid <= 1 || !strings.Contains(strings.ToLower(commandName), "process-c") || !reportedSocketMatches(line[1:], socket, filepath.Dir(configuration)) {
 				continue
 			}
 			_, processCommand, inspectErr := inspectProcess(ctx, pid)
@@ -314,6 +314,20 @@ func socketPID(ctx context.Context, configuration string) (int, error) {
 		}
 	}
 	return 0, errs.New(errs.ExitConflict, "RG627", "no process owns the Process Compose socket")
+}
+
+func reportedSocketMatches(reported, expected, processDirectory string) bool {
+	if suffix := strings.Index(reported, " type="); suffix >= 0 {
+		reported = reported[:suffix]
+	}
+	reported = strings.TrimSpace(reported)
+	if reported == "" {
+		return false
+	}
+	if filepath.IsAbs(reported) {
+		return filepath.Clean(reported) == filepath.Clean(expected)
+	}
+	return filepath.Clean(filepath.Join(processDirectory, reported)) == filepath.Clean(expected)
 }
 
 func inspectProcess(ctx context.Context, pid int) (string, string, error) {
