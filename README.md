@@ -1,7 +1,12 @@
 ```text
-RUNGRID
+██████╗ ██╗   ██╗███╗   ██╗ ██████╗ ██████╗ ██╗██████╗
+██╔══██╗██║   ██║████╗  ██║██╔════╝ ██╔══██╗██║██╔══██╗
+██████╔╝██║   ██║██╔██╗ ██║██║  ███╗██████╔╝██║██║  ██║
+██╔══██╗██║   ██║██║╚██╗██║██║   ██║██╔══██╗██║██║  ██║
+██║  ██║╚██████╔╝██║ ╚████║╚██████╔╝██║  ██║██║██████╔╝
+╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝
 
-                         🌊 One workspace. Truthful lifecycle.
+                         one workspace. truthful lifecycle.
 ```
 
 Rungrid turns a multi-service development workspace into one observable,
@@ -13,7 +18,7 @@ Process Compose runtime and, on macOS, an ordered Warp workspace:
 3. Service tabs — one exclusive lifecycle owner per tab-owned application.
 
 <!-- BEGIN KIT-MANAGED README BADGES -->
-[![Last commit](https://img.shields.io/github/last-commit/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/commits) [![Open issues](https://img.shields.io/github/issues/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/issues) [![Pull requests](https://img.shields.io/github/issues-pr/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/pulls) [![Release](https://img.shields.io/github/v/release/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/releases)
+[![Last commit](https://img.shields.io/github/last-commit/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/commits) [![Open issues](https://img.shields.io/github/issues/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/issues) [![Pull requests](https://img.shields.io/github/issues-pr/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/pulls) [![CI](https://github.com/jamesonstone/rungrid/actions/workflows/ci.yml/badge.svg)](https://github.com/jamesonstone/rungrid/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/jamesonstone/rungrid)](https://github.com/jamesonstone/rungrid/releases)
 <!-- END KIT-MANAGED README BADGES -->
 
 ## Requirements
@@ -102,15 +107,20 @@ verified project-owned state and Warp Tab Configs.
 ## Development
 
 ```sh
+make build
+make run ARGS="version"
+make install
 make check
 make test-e2e
 make release-snapshot
 ```
 
-`make check` checks formatting, vets, runs unit/race and dependency-license
-tests, verifies the specification sanitization contract, and builds
-macOS/Linux targets. The opt-in end-to-end suite launches a real Process
-Compose v1 runtime in temporary XDG state.
+`make build` writes `./bin/rungrid`; `make run ARGS="..."` executes that binary,
+and `make install` installs it with the active Go toolchain. `make check` checks
+formatting, vets, runs unit/race and dependency-license tests, verifies the
+specification sanitization contract, and builds macOS/Linux targets. The opt-in
+end-to-end suite launches a real Process Compose v1 runtime in temporary XDG
+state.
 
 ## Maintainers
 

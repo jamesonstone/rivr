@@ -1,16 +1,38 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt fmt-check vet test test-race test-e2e lint vuln license build build-cross sanitize check release-snapshot
+BIN_DIR := ./bin
+BINARY := $(BIN_DIR)/rungrid
+CMD := .
+ARGS ?=
+
+.PHONY: help build run install clean fmt fmt-check vet test test-race test-e2e lint vuln license build-cross sanitize check release-snapshot
 
 help:
 	@printf '%s\n' 'Rungrid developer workflow'
 	@printf '%s\n' ''
+	@printf '%s\n' '  make build             build ./bin/rungrid'
+	@printf '%s\n' '  make run ARGS="..."    build and run the CLI'
+	@printf '%s\n' '  make install           install with the active Go toolchain'
+	@printf '%s\n' '  make clean             remove generated build and release output'
 	@printf '%s\n' '  make check             check format, vet, test, race, licenses, and builds'
 	@printf '%s\n' '  make test-e2e          run the real Process Compose lifecycle suite'
 	@printf '%s\n' '  make lint              run golangci-lint'
 	@printf '%s\n' '  make vuln              run govulncheck'
 	@printf '%s\n' '  make license           verify dependency license material'
 	@printf '%s\n' '  make release-snapshot  validate a local GoReleaser snapshot'
+
+build:
+	mkdir -p $(BIN_DIR)
+	go build -o $(BINARY) $(CMD)
+
+run: build
+	$(BINARY) $(ARGS)
+
+install:
+	go install $(CMD)
+
+clean:
+	rm -rf $(BIN_DIR) dist
 
 fmt:
 	gofmt -w main.go cmd internal *_test.go
@@ -38,9 +60,6 @@ vuln:
 
 license:
 	tests/licenses/check.sh
-
-build:
-	go build ./...
 
 build-cross:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o /tmp/rungrid-darwin-amd64 .

@@ -2,9 +2,6 @@ package manifest
 
 import (
 	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -59,77 +56,77 @@ func Validate(m *Manifest, root string) error {
 
 	names := make(map[string]int, len(m.Services))
 	for i := range m.Services {
-		s := &m.Services[i]
+		service := &m.Services[i]
 		prefix := fmt.Sprintf("services[%d]", i)
-		if !serviceNamePattern.MatchString(s.Name) {
+		if !serviceNamePattern.MatchString(service.Name) {
 			add(prefix+".name", "must match [a-z][a-z0-9-]*")
 		}
-		if previous, exists := names[s.Name]; exists {
+		if previous, exists := names[service.Name]; exists {
 			add(prefix+".name", fmt.Sprintf("duplicates services[%d]", previous))
 		} else {
-			names[s.Name] = i
+			names[service.Name] = i
 		}
-		if s.Source != "native" && s.Source != "compose" && s.Source != "external" {
+		if service.Source != "native" && service.Source != "compose" && service.Source != "external" {
 			add(prefix+".source", "must be native, compose, or external")
 		}
-		if s.Activation != "workspace" && s.Activation != "tab" {
+		if service.Activation != "workspace" && service.Activation != "tab" {
 			add(prefix+".activation", "must be workspace or tab")
 		}
-		if s.Source == "external" && s.Activation != "workspace" {
+		if service.Source == "external" && service.Activation != "workspace" {
 			add(prefix+".activation", "external services must use workspace activation")
 		}
-		validateWorkingDirectory(root, s.WorkingDirectory, prefix+".working_directory", add)
+		validateWorkingDirectory(root, service.WorkingDirectory, prefix+".working_directory", add)
 		blocks := 0
-		if s.Run != nil {
+		if service.Run != nil {
 			blocks++
 		}
-		if s.Compose != nil {
+		if service.Compose != nil {
 			blocks++
 		}
-		if s.External != nil {
+		if service.External != nil {
 			blocks++
 		}
 		if blocks != 1 {
 			add(prefix, "must define exactly one of run, compose, or external")
 		}
-		switch s.Source {
+		switch service.Source {
 		case "native":
-			if s.Run == nil {
+			if service.Run == nil {
 				add(prefix+".run", "is required for a native service")
 			} else {
-				validateArgv(s.Run.Argv, prefix+".run.argv", add)
+				validateArgv(service.Run.Argv, prefix+".run.argv", add)
 			}
 		case "compose":
-			if s.Compose == nil {
+			if service.Compose == nil {
 				add(prefix+".compose", "is required for a compose service")
 			} else {
-				validateCompose(root, s, prefix, add)
+				validateCompose(root, service, prefix, add)
 			}
 		case "external":
-			if s.External == nil {
+			if service.External == nil {
 				add(prefix+".external", "is required for an external service")
 			} else {
-				validateExternal(s.External, prefix+".external", add)
+				validateExternal(service.External, prefix+".external", add)
 			}
 		}
-		if s.Activation == "tab" {
-			validateArgv(s.Terminal.TriggerArgv, prefix+".terminal.trigger_argv", add)
-			if len(s.Terminal.TriggerArgv) > 0 && !triggerNamePattern.MatchString(s.Terminal.TriggerArgv[0]) {
+		if service.Activation == "tab" {
+			validateArgv(service.Terminal.TriggerArgv, prefix+".terminal.trigger_argv", add)
+			if len(service.Terminal.TriggerArgv) > 0 && !triggerNamePattern.MatchString(service.Terminal.TriggerArgv[0]) {
 				add(prefix+".terminal.trigger_argv[0]", "must be a simple executable name that can be wrapped by zsh")
 			}
 		}
-		validateEnvironment(root, s, prefix, add)
-		validateHealth(s.Health, prefix+".health", add)
-		if s.Restart.Policy != "no" && s.Restart.Policy != "always" && s.Restart.Policy != "on-failure" {
+		validateEnvironment(root, service, prefix, add)
+		validateHealth(service.Health, prefix+".health", add)
+		if service.Restart.Policy != "no" && service.Restart.Policy != "always" && service.Restart.Policy != "on-failure" {
 			add(prefix+".restart.policy", "must be no, always, or on-failure")
 		}
-		if s.Restart.MaxRestarts < 0 {
+		if service.Restart.MaxRestarts < 0 {
 			add(prefix+".restart.max_restarts", "must not be negative")
 		}
-		if s.Restart.Backoff.Duration < 0 {
+		if service.Restart.Backoff.Duration < 0 {
 			add(prefix+".restart.backoff", "must not be negative")
 		}
-		for portIndex, port := range s.Ports {
+		for portIndex, port := range service.Ports {
 			if port < 1 || port > 65535 {
 				add(fmt.Sprintf("%s.ports[%d]", prefix, portIndex), "must be between 1 and 65535")
 			}
@@ -159,204 +156,4 @@ func Validate(m *Manifest, root string) error {
 		return errs.New(errs.ExitUsage, "RG120", "invalid manifest:\n  - "+strings.Join(problems, "\n  - "))
 	}
 	return nil
-}
-
-func validateWorkingDirectory(root, directory, field string, add func(string, string)) {
-	if filepath.IsAbs(directory) {
-		add(field, "must be workspace-relative")
-		return
-	}
-	clean := filepath.Clean(directory)
-	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		add(field, "must remain within the workspace")
-		return
-	}
-	resolved, err := filepath.EvalSymlinks(filepath.Join(root, clean))
-	if err != nil {
-		add(field, "must name an existing directory")
-		return
-	}
-	if !within(root, resolved) {
-		add(field, "resolves outside the workspace")
-		return
-	}
-	info, err := os.Stat(resolved)
-	if err != nil || !info.IsDir() {
-		add(field, "must name a directory")
-	}
-}
-
-func validateCompose(root string, service *Service, prefix string, add func(string, string)) {
-	compose := service.Compose
-	if filepath.IsAbs(compose.File) {
-		add(prefix+".compose.file", "must be workspace-relative")
-	} else {
-		filename := filepath.Join(root, service.WorkingDirectory, compose.File)
-		resolved, err := filepath.EvalSymlinks(filename)
-		if err != nil || !within(root, resolved) {
-			add(prefix+".compose.file", "must name a file within the workspace")
-		} else if info, statErr := os.Stat(resolved); statErr != nil || info.IsDir() {
-			add(prefix+".compose.file", "must name an existing file")
-		}
-	}
-	if strings.TrimSpace(compose.Service) == "" {
-		add(prefix+".compose.service", "is required")
-	}
-	validateArgv(compose.UpArgv, prefix+".compose.up_argv", add)
-	validateArgv(compose.DownArgv, prefix+".compose.down_argv", add)
-}
-
-func validateExternal(external *External, prefix string, add func(string, string)) {
-	if external.URL == "" && external.Command == nil {
-		add(prefix, "must define url or command")
-	}
-	if external.URL != "" {
-		parsed, err := url.Parse(external.URL)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			add(prefix+".url", "must be an http or https URL with a host")
-		}
-	}
-	if external.Command != nil {
-		validateArgv(external.Command.Argv, prefix+".command.argv", add)
-	}
-}
-
-func validateEnvironment(root string, service *Service, prefix string, add func(string, string)) {
-	for key := range service.Environment.Values {
-		if secretKeyPattern.MatchString(key) {
-			add(prefix+".environment.values."+key, "secret-like keys must use an execution-time environment provider")
-		}
-	}
-	for i, provider := range service.Environment.Providers {
-		field := fmt.Sprintf("%s.environment.providers[%d]", prefix, i)
-		switch provider.Type {
-		case "dotenv":
-			if provider.Path == "" {
-				add(field+".path", "is required")
-			} else if filepath.IsAbs(provider.Path) {
-				add(field+".path", "must be workspace-relative")
-			} else {
-				candidate := filepath.Join(root, service.WorkingDirectory, provider.Path)
-				if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
-					if !within(root, resolved) {
-						add(field+".path", "resolves outside the workspace")
-					}
-				} else if !provider.Optional {
-					add(field+".path", "must exist unless optional")
-				}
-			}
-		case "command":
-			validateArgv(provider.Argv, field+".argv", add)
-			if provider.Timeout.Duration <= 0 {
-				add(field+".timeout", "must be positive")
-			}
-		case "direnv":
-			if provider.Directory == "" {
-				add(field+".directory", "is required")
-			} else {
-				validateWorkingDirectory(root, filepath.Join(service.WorkingDirectory, provider.Directory), field+".directory", add)
-			}
-		default:
-			add(field+".type", "must be dotenv, command, or direnv")
-		}
-	}
-}
-
-func validateHealth(health *Health, prefix string, add func(string, string)) {
-	if health == nil {
-		return
-	}
-	if health.Command == nil && health.URL == "" {
-		add(prefix, "must define command or url")
-	}
-	if health.Command != nil && health.URL != "" {
-		add(prefix, "must define only one of command or url")
-	}
-	if health.Command != nil {
-		validateArgv(health.Command.Argv, prefix+".command.argv", add)
-	}
-	if health.URL != "" {
-		parsed, err := url.Parse(health.URL)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			add(prefix+".url", "must be an http or https URL with a host")
-		}
-	}
-	if health.Interval.Duration <= 0 {
-		add(prefix+".interval", "must be positive")
-	}
-	if health.Timeout.Duration <= 0 {
-		add(prefix+".timeout", "must be positive")
-	}
-	if health.Retries <= 0 {
-		add(prefix+".retries", "must be positive")
-	}
-	if health.StartPeriod.Duration < 0 {
-		add(prefix+".start_period", "must not be negative")
-	}
-}
-
-func validateArgv(argv []string, field string, add func(string, string)) {
-	if len(argv) == 0 {
-		add(field, "must be a non-empty argument vector")
-		return
-	}
-	for i, value := range argv {
-		if value == "" {
-			add(fmt.Sprintf("%s[%d]", field, i), "must not be empty")
-		}
-		if strings.ContainsRune(value, '\x00') {
-			add(fmt.Sprintf("%s[%d]", field, i), "must not contain NUL")
-		}
-	}
-}
-
-func dependencyCycle(services []Service) []string {
-	graph := make(map[string][]string, len(services))
-	for _, service := range services {
-		for dependency := range service.DependsOn {
-			graph[service.Name] = append(graph[service.Name], dependency)
-		}
-		sort.Strings(graph[service.Name])
-	}
-	state := map[string]int{}
-	stack := []string{}
-	var visit func(string) []string
-	visit = func(name string) []string {
-		state[name] = 1
-		stack = append(stack, name)
-		for _, dependency := range graph[name] {
-			switch state[dependency] {
-			case 0:
-				if cycle := visit(dependency); len(cycle) > 0 {
-					return cycle
-				}
-			case 1:
-				for i, value := range stack {
-					if value == dependency {
-						return append(append([]string(nil), stack[i:]...), dependency)
-					}
-				}
-			}
-		}
-		stack = stack[:len(stack)-1]
-		state[name] = 2
-		return nil
-	}
-	for _, service := range services {
-		if state[service.Name] == 0 {
-			if cycle := visit(service.Name); len(cycle) > 0 {
-				return cycle
-			}
-		}
-	}
-	return nil
-}
-
-func FindService(m *Manifest, name string) (*Service, bool) {
-	for i := range m.Services {
-		if m.Services[i].Name == name {
-			return &m.Services[i], true
-		}
-	}
-	return nil, false
 }

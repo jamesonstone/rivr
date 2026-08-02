@@ -45,5 +45,6 @@ go.work.sum
 .kit/*.lock
 
 # Rungrid build and validation output
+bin/
 dist/
 tmp/
