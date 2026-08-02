@@ -2,11 +2,30 @@
 
 ## PRINCIPLES
 
-<!-- TODO: define core principles that guide all decisions -->
+- A Rungrid workspace is declared by a portable manifest, not by scripts owned
+  by a particular consumer repository.
+- Process Compose is the single lifecycle authority. Every Rungrid view and
+  command must report or change that same runtime rather than infer a parallel
+  state.
+- Interactive terminal ownership and process supervision are separate: a tab
+  may own the right to start and stop a service while Process Compose remains
+  authoritative for its lifecycle and logs.
 
 ## CONSTRAINTS
 
-<!-- TODO: define invariant rules that must never be violated -->
+- Manifest and output contracts use `rungrid/v1` and `rungrid/output/v1`.
+- Project identity must not encode or hash an absolute developer path.
+- Subprocesses use argument vectors. User commands, environment values, and
+  paths must not be interpolated into shell command strings.
+- Secrets resolve only at execution time and must be redacted from errors,
+  plans, generated artifacts, registrations, and evidence.
+- External services are observed but never started or stopped by Rungrid.
+- Runtime state is project-scoped, private, atomic, and fail-closed. PID,
+  process-start, socket, generation, owner, and content-hash checks protect
+  every mutation boundary they identify.
+- Generated terminal files may be replaced or removed only when their ownership
+  marker and last recorded content hash match.
+- Headless operation must not require or generate graphical terminal state.
 
 ### Kit-Managed Baseline Rules
 
@@ -47,8 +66,22 @@
 
 ## NON-GOALS
 
-<!-- TODO: define what this project explicitly will not do -->
+- Rungrid v1 does not implement a product-owned dashboard, an all-logs tab,
+  additional graphical terminal adapters, Windows support, or command-free
+  multi-pane workspaces.
+- Rungrid does not own consumer-repository rollback material or rewrite
+  repository history as part of normal implementation delivery.
 
 ## DEFINITIONS
 
-<!-- TODO: define key terms used throughout the project -->
+- **Workspace-owned service:** a managed service started during `rungrid up`.
+- **Tab-owned service:** a disabled managed process started only while an
+  exclusive generation-scoped service session owns it.
+- **External service:** a readiness dependency observed without lifecycle
+  mutation.
+- **Generation:** an immutable, content-addressed set of derived runtime and
+  terminal artifacts for a validated manifest.
+- **Overview:** the read-only remote Process Compose TUI and its selectable
+  service logs.
+- **Versions:** the live service, listener, Git branch, commit, and worktree
+  state view.

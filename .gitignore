@@ -26,6 +26,8 @@ go.work.sum
 
 # env file
 .env
+.rungrid.local.yaml
+.rungrid.draft.json
 
 # Editor/IDE
 # .idea/
@@ -41,3 +43,8 @@ go.work.sum
 .kit/temp/
 .kit/*.tmp
 .kit/*.lock
+
+# Rungrid build and validation output
+bin/
+dist/
+tmp/

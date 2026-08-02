@@ -1,0 +1,159 @@
+package manifest
+
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/jamesonstone/rungrid/internal/errs"
+)
+
+var (
+	serviceNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	slugPattern        = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	projectIDPattern   = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*-[a-z2-7]{6}$`)
+	triggerNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+	secretKeyPattern   = regexp.MustCompile(`(?i)(secret|token|password|passwd|private[_-]?key|api[_-]?key|credential)`)
+)
+
+func Validate(m *Manifest, root string) error {
+	var problems []string
+	add := func(path, message string) { problems = append(problems, path+": "+message) }
+
+	if m.APIVersion != APIVersion {
+		add("api_version", fmt.Sprintf("must be %q", APIVersion))
+	}
+	if m.Kind != Kind {
+		add("kind", fmt.Sprintf("must be %q", Kind))
+	}
+	if strings.TrimSpace(m.Project.Name) == "" {
+		add("project.name", "is required")
+	}
+	if !slugPattern.MatchString(m.Project.Slug) {
+		add("project.slug", "must contain lowercase letters, digits, and single hyphens")
+	}
+	if m.Project.ID == "" {
+		add("project.id", "is required for stable project-scoped state; run rungrid init")
+	} else if !projectIDPattern.MatchString(m.Project.ID) || !strings.HasPrefix(m.Project.ID, m.Project.Slug+"-") {
+		add("project.id", "must be the project slug plus a six-character lowercase base32 suffix")
+	}
+	if m.Runtime.StartupTimeout.Duration <= 0 {
+		add("runtime.startup_timeout", "must be positive")
+	}
+	if m.Runtime.ShutdownTimeout.Duration <= 0 {
+		add("runtime.shutdown_timeout", "must be positive")
+	}
+	if m.Runtime.LogRetention.Duration <= 0 {
+		add("runtime.log_retention", "must be positive")
+	}
+	if strings.TrimSpace(m.Runtime.ProcessCompose.Executable) == "" {
+		add("runtime.process_compose.executable", "is required")
+	}
+	if m.Terminal.Mode != "warp" && m.Terminal.Mode != "headless" {
+		add("terminal.mode", "must be warp or headless")
+	}
+
+	names := make(map[string]int, len(m.Services))
+	for i := range m.Services {
+		service := &m.Services[i]
+		prefix := fmt.Sprintf("services[%d]", i)
+		if !serviceNamePattern.MatchString(service.Name) {
+			add(prefix+".name", "must match [a-z][a-z0-9-]*")
+		}
+		if previous, exists := names[service.Name]; exists {
+			add(prefix+".name", fmt.Sprintf("duplicates services[%d]", previous))
+		} else {
+			names[service.Name] = i
+		}
+		if service.Source != "native" && service.Source != "compose" && service.Source != "external" {
+			add(prefix+".source", "must be native, compose, or external")
+		}
+		if service.Activation != "workspace" && service.Activation != "tab" {
+			add(prefix+".activation", "must be workspace or tab")
+		}
+		if service.Source == "external" && service.Activation != "workspace" {
+			add(prefix+".activation", "external services must use workspace activation")
+		}
+		validateWorkingDirectory(root, service.WorkingDirectory, prefix+".working_directory", add)
+		blocks := 0
+		if service.Run != nil {
+			blocks++
+		}
+		if service.Compose != nil {
+			blocks++
+		}
+		if service.External != nil {
+			blocks++
+		}
+		if blocks != 1 {
+			add(prefix, "must define exactly one of run, compose, or external")
+		}
+		switch service.Source {
+		case "native":
+			if service.Run == nil {
+				add(prefix+".run", "is required for a native service")
+			} else {
+				validateArgv(service.Run.Argv, prefix+".run.argv", add)
+			}
+		case "compose":
+			if service.Compose == nil {
+				add(prefix+".compose", "is required for a compose service")
+			} else {
+				validateCompose(root, service, prefix, add)
+			}
+		case "external":
+			if service.External == nil {
+				add(prefix+".external", "is required for an external service")
+			} else {
+				validateExternal(service.External, prefix+".external", add)
+			}
+		}
+		if service.Activation == "tab" {
+			validateArgv(service.Terminal.TriggerArgv, prefix+".terminal.trigger_argv", add)
+			if len(service.Terminal.TriggerArgv) > 0 && !triggerNamePattern.MatchString(service.Terminal.TriggerArgv[0]) {
+				add(prefix+".terminal.trigger_argv[0]", "must be a simple executable name that can be wrapped by zsh")
+			}
+		}
+		validateEnvironment(root, service, prefix, add)
+		validateHealth(service.Health, prefix+".health", add)
+		if service.Restart.Policy != "no" && service.Restart.Policy != "always" && service.Restart.Policy != "on-failure" {
+			add(prefix+".restart.policy", "must be no, always, or on-failure")
+		}
+		if service.Restart.MaxRestarts < 0 {
+			add(prefix+".restart.max_restarts", "must not be negative")
+		}
+		if service.Restart.Backoff.Duration < 0 {
+			add(prefix+".restart.backoff", "must not be negative")
+		}
+		for portIndex, port := range service.Ports {
+			if port < 1 || port > 65535 {
+				add(fmt.Sprintf("%s.ports[%d]", prefix, portIndex), "must be between 1 and 65535")
+			}
+		}
+	}
+
+	allowedConditions := map[string]bool{"running": true, "healthy": true, "completed_successfully": true}
+	for i, service := range m.Services {
+		for dependency, condition := range service.DependsOn {
+			path := fmt.Sprintf("services[%d].depends_on.%s", i, dependency)
+			if _, exists := names[dependency]; !exists {
+				add(path, "references an unknown service")
+			}
+			if !allowedConditions[condition] {
+				add(path, "must be running, healthy, or completed_successfully")
+			}
+			if dependency == service.Name {
+				add(path, "may not depend on itself")
+			}
+		}
+	}
+	if cycle := dependencyCycle(m.Services); len(cycle) > 0 {
+		add("services", "dependency cycle: "+strings.Join(cycle, " -> "))
+	}
+	if len(problems) > 0 {
+		sort.Strings(problems)
+		return errs.New(errs.ExitUsage, "RG120", "invalid manifest:\n  - "+strings.Join(problems, "\n  - "))
+	}
+	return nil
+}
