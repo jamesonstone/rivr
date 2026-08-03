@@ -83,19 +83,31 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 		switch service.Source {
 		case "native":
 			item.Actions = []string{"resolve environment", "start supervised native process"}
-			if service.Run != nil && len(service.Run.Argv) > 0 {
-				executables[service.Run.Argv[0]] = true
+			if service.Run != nil {
+				for _, executable := range manifest.CommandExecutables(service.Run.Argv) {
+					executables[executable] = true
+				}
 			}
 		case "compose":
 			item.Actions = []string{"resolve environment", "start exact Compose service", "record exact Compose shutdown"}
-			if service.Compose != nil && len(service.Compose.UpArgv) > 0 {
-				executables[service.Compose.UpArgv[0]] = true
+			if service.Compose != nil {
+				for _, executable := range manifest.CommandExecutables(service.Compose.UpArgv) {
+					executables[executable] = true
+				}
 			}
 		case "external":
 			item.Actions = []string{"observe external readiness"}
+			if service.External != nil && service.External.Command != nil {
+				for _, executable := range manifest.CommandExecutables(service.External.Command.Argv) {
+					executables[executable] = true
+				}
+			}
 		}
 		if service.Activation == "tab" {
 			item.Actions = append(item.Actions, "wait for exclusive service session")
+			if len(service.Terminal.TriggerArgv) > 0 {
+				executables[service.Terminal.TriggerArgv[0]] = true
+			}
 			if loaded.Manifest.Terminal.Mode == "warp" {
 				plan.Artifacts = append(plan.Artifacts, fmt.Sprintf("terminal/warp/%02d_%s.toml.tmpl", tabIndex, service.Name))
 				tabIndex++
@@ -107,11 +119,16 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 		for _, provider := range service.Environment.Providers {
 			switch provider.Type {
 			case "command":
-				if len(provider.Argv) > 0 {
-					executables[provider.Argv[0]] = true
+				for _, executable := range manifest.CommandExecutables(provider.Argv) {
+					executables[executable] = true
 				}
 			case "direnv":
 				executables["direnv"] = true
+			}
+		}
+		if service.Health != nil && service.Health.Command != nil {
+			for _, executable := range manifest.CommandExecutables(service.Health.Command.Argv) {
+				executables[executable] = true
 			}
 		}
 		plan.Services = append(plan.Services, item)

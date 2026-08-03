@@ -58,7 +58,7 @@ func Schema() []byte {
           "additionalProperties": false,
           "properties": {
             "executable": {"type": "string"},
-            "log_level": {"type": "string"}
+            "log_level": {"enum": ["trace", "debug", "info", "warn", "error", "fatal", "panic", "disabled"]}
           }
         }
       }

@@ -56,6 +56,12 @@ func Validate(m *Manifest, root string) error {
 	if strings.TrimSpace(m.Runtime.ProcessCompose.Executable) == "" {
 		add("runtime.process_compose.executable", "is required")
 	}
+	if !map[string]bool{
+		"trace": true, "debug": true, "info": true, "warn": true,
+		"error": true, "fatal": true, "panic": true, "disabled": true,
+	}[m.Runtime.ProcessCompose.LogLevel] {
+		add("runtime.process_compose.log_level", "must be trace, debug, info, warn, error, fatal, panic, or disabled")
+	}
 	if m.Terminal.Mode != "warp" && m.Terminal.Mode != "headless" {
 		add("terminal.mode", "must be warp or headless")
 	}

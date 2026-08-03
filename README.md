@@ -138,7 +138,8 @@ make release-snapshot
 `/usr/local/bin/rungrid`, matching the local command convention. Override
 `PREFIX` to use another prefix, for example `make build PREFIX="$HOME/.local"`.
 The link step requests administrator privileges only when the destination is
-not writable and refuses to replace a regular file. `make run ARGS="..."`
+not writable, refuses to replace a regular file, and fails unless the final
+symlink targets the just-built repository binary. `make run ARGS="..."`
 executes the repository binary, and `make install` installs it with the active
 Go toolchain. `make check` checks formatting, vets, runs unit/race and
 dependency-license tests, verifies the specification sanitization contract,

@@ -141,21 +141,34 @@ func requiredExecutables(m *manifest.Manifest) []string {
 		result = append(result, value)
 	}
 	for _, service := range m.Services {
-		if service.Run != nil && len(service.Run.Argv) > 0 {
-			add(service.Run.Argv[0])
+		if service.Run != nil {
+			for _, executable := range manifest.CommandExecutables(service.Run.Argv) {
+				add(executable)
+			}
 		}
-		if service.Compose != nil && len(service.Compose.UpArgv) > 0 {
-			add(service.Compose.UpArgv[0])
+		if service.Compose != nil {
+			for _, executable := range manifest.CommandExecutables(service.Compose.UpArgv) {
+				add(executable)
+			}
 		}
-		if service.External != nil && service.External.Command != nil && len(service.External.Command.Argv) > 0 {
-			add(service.External.Command.Argv[0])
+		if service.External != nil && service.External.Command != nil {
+			for _, executable := range manifest.CommandExecutables(service.External.Command.Argv) {
+				add(executable)
+			}
 		}
-		if service.Health != nil && service.Health.Command != nil && len(service.Health.Command.Argv) > 0 {
-			add(service.Health.Command.Argv[0])
+		if service.Health != nil && service.Health.Command != nil {
+			for _, executable := range manifest.CommandExecutables(service.Health.Command.Argv) {
+				add(executable)
+			}
+		}
+		if service.Activation == "tab" && len(service.Terminal.TriggerArgv) > 0 {
+			add(service.Terminal.TriggerArgv[0])
 		}
 		for _, provider := range service.Environment.Providers {
-			if provider.Type == "command" && len(provider.Argv) > 0 {
-				add(provider.Argv[0])
+			if provider.Type == "command" {
+				for _, executable := range manifest.CommandExecutables(provider.Argv) {
+					add(executable)
+				}
 			}
 			if provider.Type == "direnv" {
 				add("direnv")
@@ -165,8 +178,10 @@ func requiredExecutables(m *manifest.Manifest) []string {
 	commands := append(append([]manifest.LifecycleCommand(nil), m.Lifecycle.BeforeUp...), m.Lifecycle.AfterDown...)
 	for _, command := range commands {
 		for _, provider := range command.Environment.Providers {
-			if provider.Type == "command" && len(provider.Argv) > 0 {
-				add(provider.Argv[0])
+			if provider.Type == "command" {
+				for _, executable := range manifest.CommandExecutables(provider.Argv) {
+					add(executable)
+				}
 			}
 			if provider.Type == "direnv" {
 				add("direnv")

@@ -33,7 +33,7 @@ compile:
 	go build -o $(BINARY) $(CMD)
 
 link: compile
-	@target="$(abspath $(BINARY))"; destination="$(GLOBAL_BINARY)"; \
+	@set -eu; target="$(abspath $(BINARY))"; destination="$(GLOBAL_BINARY)"; \
 	if [ -L "$$destination" ] && [ "$$(readlink "$$destination")" = "$$target" ]; then \
 		printf 'linked %s -> %s\n' "$$destination" "$$target"; \
 		exit 0; \
@@ -51,6 +51,10 @@ link: compile
 	else \
 		$(SUDO) ln -sfn "$$target" "$$destination"; \
 	fi; \
+	[ -L "$$destination" ] && [ "$$(readlink "$$destination")" = "$$target" ] || { \
+		printf 'failed to link %s -> %s\n' "$$destination" "$$target" >&2; \
+		exit 1; \
+	}; \
 	printf 'linked %s -> %s\n' "$$destination" "$$target"
 
 run: compile

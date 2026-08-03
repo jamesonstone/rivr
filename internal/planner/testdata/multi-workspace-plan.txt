@@ -25,4 +25,4 @@ Artifacts:
   wrappers/api
   wrappers/web
 
-Required executables: example-api, example-infrastructure, example-web, process-compose
+Required executables: database-ready, example-api, example-infrastructure, example-web, make, npm, process-compose

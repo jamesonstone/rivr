@@ -194,6 +194,17 @@ a separate repository lane and is not part of this branch.
   workspace boundary check as static service and lifecycle paths.
 - A headless plan must derive its artifact list from the effective terminal
   mode, not from the graphical mode in source configuration.
+- Process Compose 1.120 rejects the intuitive `warning` log level after
+  generation. Rungrid now validates the exact accepted levels in both its
+  semantic validator and published schema so this fails before lifecycle
+  mutation.
+- A top-level executable check is insufficient for common structured command
+  vectors such as `env ... direnv exec . make dev`. Planning and Doctor now
+  expose each supported wrapper layer plus the tab trigger without attempting
+  to parse opaque shell command strings.
+- The local command symlink recipe must fail closed when privilege elevation or
+  link replacement fails. It verifies the final link target before reporting
+  success, matching the existing local `kit`, `yp`, and `kp` command layout.
 
 ## Validation record
 
@@ -221,6 +232,13 @@ Local validation completed on macOS with Process Compose 1.120.0:
 - Real mixed-service and tab-only headless runs prove prerequisites precede the
   supervisor, teardown follows it, repeated `up` does not repeat prerequisites,
   and Process Compose remains the managed-service lifecycle authority.
+- A follow-up real headless run after Process Compose log-level and structured
+  executable discovery changes passed both mixed-service and tab-only suites;
+  ignored evidence is recorded as run `20260803T152058Z-082251`.
+- `make build` was exercised under a temporary writable prefix and produced an
+  exact `bin/rungrid` symlink. The existing `/usr/local/bin/rungrid` link uses
+  the same canonical-repository layout as `kit`, `yp`, and `kp`; no
+  administrator-authenticated link replacement was claimed from the worktree.
 
 The pull-request workflow includes the same Process Compose version and uploads
 immutable run evidence. Hosted checks exposed and now cover Linux socket-path

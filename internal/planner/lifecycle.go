@@ -84,12 +84,14 @@ func addLifecycleExecutables(executables map[string]bool, configuration *manifes
 		configuration.Lifecycle.AfterDown...,
 	)
 	for _, command := range commands {
-		if len(command.Run.Argv) > 0 {
-			executables[command.Run.Argv[0]] = true
+		for _, executable := range manifest.CommandExecutables(command.Run.Argv) {
+			executables[executable] = true
 		}
 		for _, provider := range command.Environment.Providers {
-			if provider.Type == "command" && len(provider.Argv) > 0 {
-				executables[provider.Argv[0]] = true
+			if provider.Type == "command" {
+				for _, executable := range manifest.CommandExecutables(provider.Argv) {
+					executables[executable] = true
+				}
 			}
 			if provider.Type == "direnv" {
 				executables["direnv"] = true

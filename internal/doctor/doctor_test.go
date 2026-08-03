@@ -47,6 +47,30 @@ services: []
 	}
 }
 
+func TestRequiredExecutablesIncludesStructuredWrappersAndTabTrigger(t *testing.T) {
+	t.Parallel()
+	configuration := manifest.Manifest{Services: []manifest.Service{{
+		Name: "api", Source: "native", Activation: "tab",
+		Run:      &manifest.Run{Argv: []string{"env", "-u", "PC_LOG_LEVEL", "direnv", "exec", ".", "sh", "-c", "exec npm run dev"}},
+		Terminal: manifest.ServiceTerminal{TriggerArgv: []string{"make", "dev"}},
+	}}}
+	actual := requiredExecutables(&configuration)
+	for _, expected := range []string{"env", "direnv", "sh", "make"} {
+		if !containsExecutable(actual, expected) {
+			t.Errorf("required executable %q missing from %#v", expected, actual)
+		}
+	}
+}
+
+func containsExecutable(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func hasCheck(report Report, name, status string) bool {
 	for _, check := range report.Checks {
 		if check.Name == name && check.Status == status {
