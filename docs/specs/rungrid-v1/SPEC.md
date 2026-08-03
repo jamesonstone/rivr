@@ -1,6 +1,6 @@
 # Rungrid v1 implementation record
 
-Status: v1 candidate implemented; workspace lifecycle extension in progress
+Status: v1 candidate implemented; workspace lifecycle extension locally validated
 
 ## Purpose
 
@@ -146,9 +146,8 @@ Status: implemented in `GH-3`; release publication is gated.
 
 ### Stage 5: legacy-workspace dogfood and cutover
 
-Status: in progress. The generic workspace-root and lifecycle prerequisites are
-being implemented on `GH-10`; consumer adoption remains a separate repository
-lane and is not part of this branch.
+Status: implemented and locally validated on `GH-10`. Consumer adoption remains
+a separate repository lane and is not part of this branch.
 
 - Express the legacy workspace as a manifest, replace active wrappers without
   duplicating service inventory, retain isolated rollback material for one
@@ -179,6 +178,22 @@ lane and is not part of this branch.
   configuration directory. The client keeps these streams separate so
   diagnostics cannot corrupt machine-readable state while failed command
   output remains redacted.
+- The source manifest must establish and validate the workspace root before an
+  import path can be resolved. Imports and the ignored local overlay are then
+  merged without permitting either input to change that boundary.
+- A valid tab-only Process Compose generation has every process disabled. The
+  detached runtime may still be ready even though no managed service is running
+  until a session explicitly starts one.
+- Lifecycle cleanup cannot depend on a runtime record. A durable teardown
+  obligation must remain actionable after supervisor startup fails or its
+  runtime identity disappears.
+- Replacing an advisory-lock file while a process is waiting can split mutual
+  exclusion across inodes. The lock holder therefore validates the acquired
+  inode and reacquires when the path was replaced.
+- Environment-provider paths receive the same execution-time, symlink-aware
+  workspace boundary check as static service and lifecycle paths.
+- A headless plan must derive its artifact list from the effective terminal
+  mode, not from the graphical mode in source configuration.
 
 ## Validation record
 
@@ -199,18 +214,31 @@ Local validation completed on macOS with Process Compose 1.120.0:
 - A Linux/arm64 container reproduction with Process Compose 1.120.0 exercised
   workspace startup, tab-session ownership, `Disabled` to `Running` to
   `Completed` transitions, interrupt handling, status JSON, and shutdown.
+- Workspace-root and lifecycle tests cover sibling repositories, symlink
+  escapes, overlay replacement, exact argument vectors, timeouts, cancellation,
+  redaction, lock replacement, journaling, rollback, missing-runtime cleanup,
+  retry and no-op teardown, and uninstall refusal while cleanup is required.
+- Real mixed-service and tab-only headless runs prove prerequisites precede the
+  supervisor, teardown follows it, repeated `up` does not repeat prerequisites,
+  and Process Compose remains the managed-service lifecycle authority.
 
 The pull-request workflow includes the same Process Compose version and uploads
 immutable run evidence. Hosted checks exposed and now cover Linux socket-path
 reporting and separation of Process Compose diagnostics from JSON responses.
-The graphical Warp smoke, signing, SBOM generation, published release, and
-consumer-workspace parity are not observed and are not passing claims.
+The graphical Warp smoke, local SBOM generation, action-workflow linting,
+signing, published release, and consumer-workspace parity are not observed and
+are not passing claims. Their required local tools or controlled graphical
+environment were unavailable where applicable.
 
 ## Outcome
 
 Rungrid v1 is implemented as a review candidate with the neutral contract,
-portable manifest, lifecycle runtime, Warp/headless presentation, onboarding,
-tests, CI, and release packaging. Default-branch history was not rewritten:
+portable multi-repository workspace boundary, crash-safe one-shot lifecycle,
+Process Compose runtime, Warp/headless presentation, onboarding, tests, CI, and
+release packaging. The neutral implementation is ready for a separately owned
+consumer cutover lane; this outcome does not claim consumer parity.
+
+Default-branch history was not rewritten:
 repository guardrails prohibit force pushing or mutating the default branch,
 and archived pull-request refs or direct object URLs could retain old content
 even after a branch rewrite. Release publication remains gated on review,

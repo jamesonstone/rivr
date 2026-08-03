@@ -63,19 +63,34 @@ project:
   name: Example Workspace
   slug: example-workspace
   id: example-workspace-k7m4q2
+workspace:
+  root: ..
 terminal:
   mode: warp
+lifecycle:
+  before_up:
+    - name: prepare-database
+      working_directory: control
+      timeout: 2m
+      run:
+        argv: [docker, compose, up, --detach, --wait, database]
+  after_down:
+    - name: remove-infrastructure
+      working_directory: control
+      timeout: 2m
+      run:
+        argv: [docker, compose, down, --remove-orphans]
 services:
   - name: database
-    source: compose
+    source: external
     activation: workspace
-    compose:
-      file: compose.yaml
-      service: database
+    external:
+      command:
+        argv: [database-ready, --quiet]
   - name: api
     source: native
     activation: tab
-    working_directory: services/api
+    working_directory: api
     run:
       argv: [go, run, ./cmd/server]
     terminal:
@@ -84,9 +99,13 @@ services:
       database: running
 ```
 
-Workspace-owned services start during `up`. Tab-owned services remain disabled
-in Process Compose until an exclusive `rungrid session` owns them. External
-services are readiness dependencies only and are never started or stopped.
+`workspace.root` is relative to the manifest directory and may include sibling
+repositories. One-shot lifecycle commands run in order around the supervised
+workspace and remain recoverable after a failed startup or cleanup. Workspace-
+owned services start during `up`; tab-owned services remain disabled in Process
+Compose until an exclusive `rungrid session` owns them. External services are
+readiness dependencies only and are never directly started or stopped by
+service commands.
 
 The complete product and safety contract is [CLI_SPEC.md](CLI_SPEC.md). Durable
 implementation rationale lives in

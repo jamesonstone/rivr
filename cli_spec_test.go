@@ -56,6 +56,10 @@ func TestCLISpecDefinesV1Contract(t *testing.T) {
 		"`tab` services",
 		"Process Compose `>=1.120.0,<2.0.0`",
 		"Warp is the only graphical terminal adapter in v1",
+		"workspace.root",
+		"lifecycle.before_up",
+		"cleanup-required",
+		"Starting or stopping one service never runs global lifecycle hooks",
 		"## 15. Legacy-workspace migration contract",
 	} {
 		if !strings.Contains(text, required) {

@@ -12,7 +12,7 @@
 | --- | --- | --- | --- | --- |
 | Formatting | `make fmt-check` | `CI / test` | yes | `gofmt` cleanliness without mutation |
 | Static analysis | `make vet` | `CI / test` | yes | all Go packages |
-| Unit and integration | `make test` | `CI / test` | yes | schema, merge, state, argv, environment, generation, lifecycle, onboarding, and golden contracts |
+| Unit and integration | `make test` | `CI / test` | yes | schema, merge, workspace boundaries, state, argv, environment, generation, lifecycle journal and recovery, onboarding, and golden contracts |
 | Race | `make test-race` | `CI / test` | yes | all Go packages, with the opt-in E2E skipped |
 | Contract sanitization | `make sanitize` | `CI / test` | yes | rejects personal/workspace identifiers and unsafe absolute paths in `CLI_SPEC.md` |
 | Lint | `make lint` | `CI / lint` | yes | `golangci-lint` |
@@ -25,7 +25,7 @@
 
 | Suite | Type | Environment | Command | Automation | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Headless lifecycle | end-to-end | local macOS or Linux | `tests/end-to-end/local/run.sh` | `CI / end-to-end` and local milestone | `tmp/<UTC-date>/rungrid-headless-e2e/<run-number>/` and a 14-day Actions artifact |
+| Headless lifecycle | end-to-end | local macOS or Linux | `tests/end-to-end/local/run.sh` | `CI / end-to-end` and local milestone | `tmp/<UTC-date>/rungrid-headless-e2e/<run-number>/` and a 14-day Actions artifact; mixed-service and tab-only workspaces exercise one-shot hook ordering |
 | Graphical Warp workspace | end-to-end | local macOS | controlled operator smoke after installation | manual | `tmp/<UTC-date>/rungrid-warp-smoke/<run-number>/` when implemented |
 | Production | end-to-end | production | not applicable | none | Rungrid is a local CLI, not a deployed service |
 
@@ -43,9 +43,10 @@
 ## Credentials And Test Data
 
 - No credentials or remote test data are required.
-- Tests use only generic fixtures and temporary local processes. The local E2E
-  test shuts down Process Compose and relies on the Go test temporary-directory
-  cleanup after asserting the runtime marker is removed.
+- Tests use only generic multi-repository fixtures and temporary local
+  processes. The local E2E test shuts down Process Compose and relies on the Go
+  test temporary-directory cleanup after asserting the runtime marker is
+  removed and the lifecycle journal is inactive.
 
 ## Evidence And Retention
 
