@@ -29,6 +29,8 @@ Warp is the only graphical terminal adapter in v1.
 ### 2.1 In scope
 
 - declarative native, Compose, and external services;
+- portable workspace roots that may contain multiple sibling repositories;
+- ordered one-shot workspace prerequisite and teardown commands;
 - workspace-owned and tab-owned activation;
 - structured commands, environment providers, dependencies, health checks,
   restart policies, namespaces, and terminal metadata;
@@ -70,26 +72,30 @@ must not hard-code a repository owner, package namespace, or installation tap.
 
 ### 4.1 Checked-in manifest
 
-The project manifest is `.rungrid.yaml` at the workspace root. It is portable:
-all project file references are relative to the manifest directory unless a
-field explicitly permits an operator-local absolute path.
+The project manifest is `.rungrid.yaml`. Its directory is the manifest
+directory. The execution boundary is the separately resolved workspace root,
+which defaults to the manifest directory but may be one of its ancestors. The
+source manifest is portable and never contains an absolute developer path.
 
 ### 4.2 Local override
 
-`.rungrid.local.yaml` is an optional ignored overlay for operator-local values.
-It uses the same API and kind. Maps merge recursively, scalars replace, and
-sequences replace in full. A service overlay merges by service name. The final
-merged document is validated as one manifest.
+`.rungrid.local.yaml` is an optional ignored overlay adjacent to the source
+manifest. It uses the same API and kind. Maps merge recursively, scalars
+replace, and sequences replace in full. A service overlay merges by service
+name. A lifecycle phase supplied by the overlay replaces that complete ordered
+phase. The final merged document is validated as one manifest.
 
 The local overlay must not be required for a repository's default workflow.
 Secrets remain references, not literal values.
 
 ### 4.3 Imports
 
-`imports` loads additional manifest fragments before the local overlay. Imports
-are resolved relative to the importing document, must remain within the root
-workspace, and may not form a cycle. Imports merge in listed order. The root
-manifest has precedence over imports.
+`imports` loads additional manifest fragments before the local overlay. Import
+paths are resolved relative to the importing document, must remain within the
+resolved workspace root, and may not form a cycle. Imports merge in listed
+order. The root manifest has precedence over imports. Imported fragments may
+not redefine `workspace.root`; the source manifest establishes the execution
+boundary before imports are traversed.
 
 ## 5. Manifest contract
 
@@ -103,6 +109,9 @@ project:
   name: Example Workspace
   slug: example-workspace
 
+workspace:
+  root: .
+
 imports: []
 
 runtime:
@@ -115,11 +124,16 @@ terminal:
   mode: warp
   open: true
 
+lifecycle:
+  before_up: []
+  after_down: []
+
 services: []
 ```
 
 Allowed top-level fields are exactly `api_version`, `kind`, `project`,
-`imports`, `runtime`, `terminal`, and `services`. Unknown fields are errors.
+`workspace`, `imports`, `runtime`, `terminal`, `lifecycle`, and `services`.
+Unknown fields are errors.
 
 ### 5.2 Project
 
@@ -138,7 +152,72 @@ project:
   the manifest. Rungrid never hashes or persists the workspace's absolute path
   to create identity.
 
-### 5.3 Runtime
+### 5.3 Workspace
+
+```yaml
+workspace:
+  root: ..
+```
+
+`root` defaults to `.` and is resolved relative to the manifest directory. It
+must be relative and may identify an ancestor directory so one manifest can
+describe sibling repositories. The manifest directory must remain within the
+resolved root.
+
+Service working directories, environment-provider paths, Compose files, and
+other workspace-owned paths resolve relative to the workspace root. Every
+resolved path must remain within that root after normalization and
+symlink-aware boundary checks. The adjacent local overlay is the only source
+file whose location is not changed by this setting.
+
+The relative declaration participates in deterministic generation. The
+resolved absolute root exists only in machine-local runtime state and never
+contributes to project identity.
+
+### 5.4 Lifecycle
+
+```yaml
+lifecycle:
+  before_up:
+    - name: prepare-database
+      working_directory: tools
+      timeout: 2m
+      run:
+        argv: [docker, compose, up, --detach, --wait, database]
+      environment:
+        providers:
+          - type: dotenv
+            path: .env
+            optional: true
+  after_down:
+    - name: remove-infrastructure
+      working_directory: tools
+      timeout: 2m
+      run:
+        argv: [docker, compose, down, --remove-orphans]
+```
+
+Lifecycle commands are ordered one-shot Rungrid operations. They are not
+Process Compose services and do not receive terminal tabs.
+The phase fields are `lifecycle.before_up` and `lifecycle.after_down`.
+
+- `name` is required and unique within its phase;
+- `working_directory` defaults to the workspace root and is a checked
+  workspace-relative directory;
+- `run.argv` is a required non-empty argument vector and is never evaluated by
+  an implicit shell;
+- `timeout` is optional and defaults to the corresponding runtime startup or
+  shutdown timeout;
+- `environment` uses the same providers, precedence, execution-time secret
+  resolution, and redaction rules as services;
+- commands run sequentially in manifest order;
+- a non-zero exit, timeout, signal, or executable failure fails the phase; and
+- teardown continues through every command and reports the aggregate result.
+
+`allow_failure` is not part of v1. A local overlay replaces an entire
+`before_up` or `after_down` sequence rather than merging list elements.
+
+### 5.5 Runtime
 
 ```yaml
 runtime:
@@ -154,7 +233,7 @@ Durations use Go duration syntax. Executable values are names resolved through
 the current execution environment unless an operator-local override supplies a
 path. Required Process Compose compatibility is always enforced.
 
-### 5.4 Terminal
+### 5.6 Terminal
 
 ```yaml
 terminal:
@@ -167,7 +246,7 @@ terminal:
 headless mode. Terminal generation is skipped in headless mode. Themes are
 advisory and may be omitted when the terminal does not expose a stable value.
 
-### 5.5 Services
+### 5.7 Services
 
 Service order is significant. It determines stable plan order and service-tab
 order.
@@ -243,7 +322,7 @@ Each service supports:
 Service names are unique. A dependency must name another service. Dependency
 cycles are rejected.
 
-### 5.6 Native source
+### 5.8 Native source
 
 ```yaml
 source: native
@@ -255,7 +334,7 @@ run:
 `run.argv` is a non-empty argument vector. It is never evaluated by a shell.
 `stdin` defaults to false because Process Compose owns the service process.
 
-### 5.7 Compose source
+### 5.9 Compose source
 
 ```yaml
 source: compose
@@ -277,7 +356,7 @@ exact expanded shutdown vector in generation state and reuses it during
 Multiple services may reference one Compose project. Shutdown deduplicates
 project-level actions while preserving service-specific stop semantics.
 
-### 5.8 External source
+### 5.10 External source
 
 ```yaml
 source: external
@@ -290,7 +369,7 @@ external:
 External services are readiness dependencies only. Rungrid never starts,
 stops, restarts, or uninstalls them.
 
-### 5.9 Activation
+### 5.11 Activation
 
 `workspace` services start as part of `rungrid up`. Their Process Compose
 entries are enabled unless their source is external.
@@ -302,7 +381,7 @@ operators use `rungrid session <service>` for the same semantics.
 External services must use workspace activation because no tab can own their
 lifecycle.
 
-### 5.10 Terminal service metadata
+### 5.12 Terminal service metadata
 
 ```yaml
 terminal:
@@ -320,7 +399,7 @@ Invocations of the same executable with different arguments pass through to
 the user's normal command. Shell aliases do not change stored trigger
 semantics.
 
-### 5.11 Environment
+### 5.13 Environment
 
 ```yaml
 environment:
@@ -346,7 +425,7 @@ generated Process Compose files contain provider references or runtime wrapper
 commands, never resolved secret values. Diagnostics redact values for keys
 matching secret-like names and values explicitly marked sensitive.
 
-### 5.12 Dependencies
+### 5.14 Dependencies
 
 ```yaml
 depends_on:
@@ -359,7 +438,7 @@ Rungrid validates the graph and compiles supported requirements into Process
 Compose dependencies. External health dependencies are checked by a generated
 wrapper.
 
-### 5.13 Health checks
+### 5.15 Health checks
 
 ```yaml
 health:
@@ -375,7 +454,7 @@ Health commands use argument vectors and inherit the service's resolved
 execution environment. A health failure is observable in status and Overview
 and participates in startup timeout behavior.
 
-### 5.14 Restart policy
+### 5.16 Restart policy
 
 ```yaml
 restart:
@@ -416,6 +495,8 @@ generations/<generation-id>/
   wrappers/
   logs/
 runtime.json
+lifecycle.json
+lifecycle-logs/<generation-id>/
 current
 sessions/
 tabs/
@@ -426,6 +507,19 @@ locks/
 absolute path. Runtime-only records may contain the currently resolved
 workspace path because execution needs it; they are replaced whenever the
 workspace is reopened and are not identity inputs.
+
+`lifecycle.json` is a crash-safe project journal. It records the project and
+generation, manifest and lifecycle hashes, lifecycle state, completed
+`before_up` commands, whether teardown is required, verified runtime identity
+when one exists, timestamps, sanitized command outcomes, and the latest cleanup
+failure. Its lifecycle states are `inactive`, `starting`, `active`,
+`stopping`, and `cleanup-required`.
+
+The journal is written atomically before an external prerequisite begins. Once
+teardown is required it remains required until every configured `after_down`
+command completes successfully, even if the supervisor never started or its
+runtime record is absent. Command output is redacted and stored in private,
+generation-scoped lifecycle logs rather than deterministic artifacts.
 
 All state directories and files are user-only. Files are written to a sibling
 temporary file, synced when durability matters, permissioned, and atomically
@@ -446,7 +540,9 @@ fails closed and identifies the conflicting path.
 
 `rungrid plan` performs no lifecycle or terminal mutation. It loads imports and
 the local overlay, validates the final manifest, computes the generation hash,
-and prints ordered actions. Secret values are never resolved.
+and prints the manifest directory, relative workspace root, ordered lifecycle
+commands, timeouts, teardown semantics, and service actions. Secret values are
+never resolved and no absolute developer path appears in deterministic output.
 
 `rungrid generate` materializes a complete generation in a temporary directory,
 validates every artifact, writes ownership metadata, and atomically promotes it.
@@ -461,6 +557,10 @@ The generated Process Compose configuration:
 - compiles dependencies, health checks, restart policy, namespaces, and logs;
 - contains no resolved secrets;
 - never generates a process for lifecycle control of an external service.
+
+Lifecycle commands are validated and represented in plans and the journal, but
+are not compiled into Process Compose configuration. `generate` never runs
+them.
 
 ## 8. Runtime identity
 
@@ -492,15 +592,27 @@ delete an arbitrary socket.
 
 `rungrid up`:
 
-1. loads, merges, validates, plans, and generates;
-2. starts or safely reuses the detached Process Compose daemon;
-3. waits for workspace-owned services and external dependencies;
-4. opens the ordered Warp workspace unless headless or explicitly disabled;
-5. waits for requested tab-owned services to report a lifecycle state; and
-6. prints a stable summary.
+1. loads, merges, and validates the complete manifest before external mutation;
+2. acquires the exclusive project lifecycle lock and reconciles the journal
+   with exact runtime identity;
+3. finishes any required cleanup before accepting a different generation;
+4. plans and generates, then atomically records `starting` and teardown intent;
+5. runs `before_up` sequentially in manifest order;
+6. starts or safely reuses the detached Process Compose daemon only after every
+   prerequisite succeeds;
+7. waits for workspace-owned services and external dependencies;
+8. opens the ordered Warp workspace unless headless or explicitly disabled;
+9. waits for requested tab-owned services to report a lifecycle state;
+10. records `active` and prints a stable summary.
 
 Tab-owned processes are not started merely because the daemon starts. Their
 service tabs acquire ownership and start them.
+
+An already active, exactly verified generation is reused without rerunning
+prerequisites. Any failure or ownership-ending signal after teardown becomes
+required stops the verified partial runtime, attempts every configured
+`after_down` command, and records either `inactive` or `cleanup-required`.
+Prerequisite failure never opens Warp.
 
 ### 9.2 Session ownership
 
@@ -543,21 +655,35 @@ identity verification. A tab-owned session observes the stop, releases its
 registration, and returns to its managed shell.
 
 Stopping an external service is an error because Rungrid does not own it.
+Starting or stopping one service never runs global lifecycle hooks.
 
 ### 9.5 Down
 
 `rungrid down`:
 
-1. prevents new sessions;
-2. stops tab-owned services in reverse dependency order;
-3. stops workspace-owned native services in reverse dependency order;
-4. runs the recorded exact Compose shutdown commands;
-5. leaves external services untouched;
-6. asks Process Compose to shut down and verifies daemon exit; and
-7. removes only verified runtime registrations and sockets.
+1. acquires the project lifecycle lock and records `stopping`;
+2. prevents new sessions;
+3. stops tab-owned services in reverse dependency order;
+4. stops workspace-owned native services in reverse dependency order;
+5. runs the recorded exact Compose shutdown commands;
+6. leaves external services untouched;
+7. asks Process Compose to shut down and verifies daemon exit;
+8. removes only verified runtime registrations and sockets; and
+9. whenever the journal says teardown is required, attempts every configured
+   `after_down` command in manifest order, even when the supervisor never
+   started or is already absent.
 
-A partial failure is reported per service and produces a non-zero exit. Rungrid
-continues safe independent shutdown actions.
+A partial failure is reported per action and produces a non-zero exit. Rungrid
+continues safe independent shutdown and teardown actions. Cleanup failure
+retains `cleanup-required`, including the sanitized failure, so a later `down`
+can retry. Successful teardown records `inactive`; repeated `down` is then a
+no-op.
+
+Rungrid never silently reruns prerequisites for an unverified stale runtime.
+Generation or lifecycle-hash mismatch is explicit. Cleanup required by an old
+generation must finish under its recorded manifest before a new generation may
+start. When exact PID or socket identity cannot be proven, Rungrid fails closed
+rather than signaling, deleting, or treating the workspace as clean.
 
 ## 10. Warp presentation
 
@@ -684,9 +810,11 @@ rungrid doctor [--fix]
 
 Doctor reports manifest validity, path boundaries, required executables,
 Process Compose compatibility, Warp/zsh availability when graphical mode is
-selected, state permissions, stale runtime evidence, port conflicts, and
-source-control availability. `--fix` is limited to safe project-owned state
-repairs and requires confirmation for user-visible changes.
+selected, lifecycle working directories and executables, state and journal
+permissions, stale runtime or cleanup-required evidence, port conflicts, and
+source-control availability. Doctor does not execute lifecycle commands.
+`--fix` is limited to safe project-owned state repairs and requires
+confirmation for user-visible changes.
 
 ### 11.3 plan
 
@@ -696,7 +824,8 @@ rungrid plan [--output human|json]
 
 Prints the merged configuration fingerprint, generation ID, service graph,
 activation decisions, required providers, files to generate, and lifecycle
-actions. It does not resolve secrets or change runtime state.
+actions in exact order with working directories, argument vectors, timeouts,
+and rollback behavior. It does not resolve secrets or change runtime state.
 
 ### 11.4 generate
 
@@ -715,8 +844,9 @@ rungrid up [service ...] [--headless] [--no-open]
 ```
 
 Starts or reuses the workspace runtime, waits for workspace activation, and
-opens Warp unless disabled. Optional service arguments identify tab services
-whose lifecycle state must be observed before success.
+opens Warp unless disabled. It runs prerequisites and rollback according to the
+lifecycle contract. Optional service arguments identify tab services whose
+lifecycle state must be observed before success.
 
 ### 11.6 open
 
@@ -753,7 +883,9 @@ rungrid status [service ...] [--json]
 ```
 
 Reports runtime identity, generation, service lifecycle/health, ownership, and
-readiness without mutation.
+readiness without mutation. It also reports lifecycle journal state, teardown
+requirement, completed prerequisites, and the latest sanitized cleanup failure,
+including when no supervisor exists.
 
 ### 11.10 logs
 
@@ -790,7 +922,8 @@ rungrid down [--timeout <duration>]
 ```
 
 Performs ordered project-owned shutdown. It is idempotent when no verified
-runtime exists.
+runtime exists only when the lifecycle journal also proves no teardown is
+required. A missing runtime does not suppress required `after_down` commands.
 
 ### 11.14 uninstall
 
@@ -803,6 +936,9 @@ only this project's generated state. It does not remove the checked-in manifest,
 local overlay, external services, user shell configuration, Process Compose,
 Warp, or unrelated terminal files. `--keep-config` preserves generated config
 for diagnosis; it does not refer to the source manifest.
+
+Uninstall refuses to discard a cleanup-required journal. It succeeds only
+after required teardown completes or when no teardown was ever required.
 
 ### 11.15 config
 
@@ -880,10 +1016,13 @@ Rungrid must:
 - resolve secrets only at execution time and redact diagnostics, plans, state,
   and evidence;
 - reject imports and working directories that escape the workspace;
+- require a relative workspace root and prove the manifest directory remains
+  inside its symlink-resolved boundary;
 - reject generated or uninstall paths that escape the selected project state;
 - use user-only permissions for state, locks, sockets, logs, and terminal files;
 - verify PID start identity and socket ownership before signaling or deleting;
-- scope locks by project, generation, and service;
+- scope the global lifecycle lock by project and session locks by project,
+  generation, and service;
 - avoid following unverified symlinks during generation and uninstall;
 - preserve modified generated artifacts and report the ownership conflict;
 - leave external services untouched;
@@ -898,15 +1037,19 @@ Rungrid must:
 A legacy managed-development workspace migrates by creating one portable
 manifest as the sole service inventory:
 
-1. represent shared infrastructure as workspace-owned Compose services;
-2. represent applications as tab-owned native services;
-3. convert existing workspace startup, shutdown, status, attachment, and
+1. choose a relative workspace root that includes every referenced repository;
+2. represent one-shot infrastructure initialization and final teardown as
+   lifecycle commands;
+3. represent continuously supervised shared infrastructure as workspace-owned
+   services;
+4. represent applications as tab-owned native services;
+5. convert existing workspace startup, shutdown, status, attachment, and
    Versions entry points into thin Rungrid wrappers;
-4. keep unrelated command-free workspaces outside Rungrid;
-5. retain previous managed-development scripts as inactive rollback material
+6. keep unrelated command-free workspaces outside Rungrid;
+7. retain previous managed-development scripts as inactive rollback material
    for one release cycle;
-6. isolate rollback state, socket, and ownership markers from Rungrid; and
-7. remove legacy active-path documentation only after graphical and headless
+8. isolate rollback state, socket, and ownership markers from Rungrid; and
+9. remove legacy active-path documentation only after graphical and headless
    parity is proven.
 
 The migration must not maintain a second active service inventory. Project-only
@@ -917,8 +1060,10 @@ examples, release metadata, or this specification.
 
 Rungrid v1 is complete when all of the following are demonstrated:
 
-- schema/default/merge, path, dependency, trigger, redaction, ownership, atomic
-  write, lock, identity, and exit-code unit and fuzz tests pass;
+- schema/default/merge, workspace-root boundary, lifecycle ordering and overlay
+  replacement, path, dependency, trigger, redaction, journal transition,
+  ownership, atomic write, lock, identity, and exit-code unit and fuzz tests
+  pass;
 - generic manifests, Process Compose output, plans, JSON, and ordered Warp files
   match reviewed golden fixtures;
 - fake executable integration tests verify exact Process Compose, Compose,
@@ -929,11 +1074,13 @@ Rungrid v1 is complete when all of the following are demonstrated:
 - onboarding transition, backtracking, resize, profile, inference, confirmation,
   draft, resume, invalidation, and secret-free snapshot tests pass;
 - a temporary-XDG end-to-end test covers init, plan, generate, up, Overview,
-  Versions, session stop/restart, down, and uninstall without changing unrelated
-  files;
+  Versions, session stop/restart, prerequisite rollback, missing-runtime
+  teardown, retry after cleanup failure, down, and uninstall without changing
+  unrelated files;
 - Process Compose at the minimum supported version passes real integration;
 - controlled macOS Warp and Linux headless smoke tests pass;
-- a generic legacy workspace demonstrates exact tab/layout and lifecycle parity;
+- a generic multi-repository workspace demonstrates exact tab/layout,
+  lifecycle, crash-recovery, and teardown parity;
 - formatting, vet, race, vulnerability, license, multi-OS build, release
   snapshot, fresh-install, and identifier/path sanitization checks pass; and
 - release candidate evidence is immutable, scoped, and redacted.

@@ -1,6 +1,6 @@
 # Rungrid v1 implementation record
 
-Status: implemented and locally validated; delivery gates remain
+Status: v1 candidate implemented; workspace lifecycle extension in progress
 
 ## Purpose
 
@@ -53,6 +53,54 @@ in Overview while preserving direct per-tab control.
   neutral contract is delivered normally; historical objects and archived pull
   request references may retain earlier content.
 
+## Workspace lifecycle extension
+
+Multi-repository workspaces are a core portability requirement. A manifest may
+live in one repository while describing sibling repositories under a common
+relative workspace root. Infrastructure setup and final teardown are ordered,
+one-shot workspace lifecycle operations rather than long-running Process
+Compose services.
+
+This extension is delivered in two review lanes. Rungrid issue `#10` owns the
+neutral manifest, runtime, recovery, command, test, and documentation changes.
+Only after those prerequisites are reviewable will a separate consumer issue,
+branch, specification, and ready pull request adopt the feature. Rungrid source
+and fixtures remain free of consumer names, paths, and commands.
+
+Material decisions for this extension:
+
+- The manifest directory and workspace root are distinct. `workspace.root`
+  defaults to `.`, is relative to the manifest directory, may name an ancestor,
+  and is resolved with symlink-aware containment checks.
+- The source manifest establishes the workspace boundary before imports are
+  traversed. Imported fragments cannot redefine it; the adjacent ignored local
+  overlay remains anchored to the manifest directory.
+- Services, Compose files, and environment-provider paths resolve from the
+  workspace root. Stable identity and deterministic generation use only the
+  relative declaration; absolute resolved paths remain machine-local runtime
+  data.
+- `lifecycle.before_up` and `lifecycle.after_down` are sequential structured
+  argument vectors. They reuse environment providers and redaction, but are
+  never emitted as Process Compose processes or Warp tabs.
+- The lifecycle journal records teardown intent before the first prerequisite
+  mutates external state. Required teardown survives prerequisite failure,
+  supervisor startup failure, signals, process crashes, and a missing runtime
+  record.
+- One project-scoped lifecycle lock serializes `up`, `down`, recovery, and
+  uninstall. Service-level `start` and `stop` preserve their existing scope and
+  never invoke global hooks.
+- Cleanup attempts every teardown command, retains `cleanup-required` on any
+  failure, and must complete under the recorded generation before a different
+  generation may start.
+- Exact PID and socket identity remain hard safety gates. A stale or ambiguous
+  runtime is not permission to rerun prerequisites, signal a process, delete a
+  socket, or discard teardown state.
+
+The implementation sequence is contract and manifest loading, deterministic
+planning, journal and executor, lifecycle command integration, recovery and
+uninstall behavior, then generic tests and delivery validation. The consumer
+lane follows only after the neutral lane is complete.
+
 ## Delivery record
 
 The accepted plan proposed a separate issue, branch, and pull request for each
@@ -98,9 +146,9 @@ Status: implemented in `GH-3`; release publication is gated.
 
 ### Stage 5: legacy-workspace dogfood and cutover
 
-Status: blocked pending review, merge, a chosen repository license, a published
-release candidate, and controlled graphical validation. This stage is performed
-in the consumer repository, not this repository.
+Status: in progress. The generic workspace-root and lifecycle prerequisites are
+being implemented on `GH-10`; consumer adoption remains a separate repository
+lane and is not part of this branch.
 
 - Express the legacy workspace as a manifest, replace active wrappers without
   duplicating service inventory, retain isolated rollback material for one
