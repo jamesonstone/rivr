@@ -115,10 +115,15 @@ make test-e2e
 make release-snapshot
 ```
 
-`make build` writes `./bin/rungrid`; `make run ARGS="..."` executes that binary,
-and `make install` installs it with the active Go toolchain. `make check` checks
-formatting, vets, runs unit/race and dependency-license tests, verifies the
-specification sanitization contract, and builds macOS/Linux targets. The opt-in
+`make build` writes `./bin/rungrid` and links it as
+`/usr/local/bin/rungrid`, matching the local command convention. Override
+`PREFIX` to use another prefix, for example `make build PREFIX="$HOME/.local"`.
+The link step requests administrator privileges only when the destination is
+not writable and refuses to replace a regular file. `make run ARGS="..."`
+executes the repository binary, and `make install` installs it with the active
+Go toolchain. `make check` checks formatting, vets, runs unit/race and
+dependency-license tests, verifies the specification sanitization contract,
+and builds macOS/Linux targets without changing the global link. The opt-in
 end-to-end suite launches a real Process Compose v1 runtime in temporary XDG
 state.
 

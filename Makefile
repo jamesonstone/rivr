@@ -3,15 +3,19 @@
 BIN_DIR := ./bin
 BINARY := $(BIN_DIR)/rungrid
 CMD := .
+PREFIX ?= /usr/local
+GLOBAL_BIN_DIR := $(PREFIX)/bin
+GLOBAL_BINARY := $(GLOBAL_BIN_DIR)/rungrid
+SUDO ?= sudo
 ARGS ?=
 
-.PHONY: help build run install clean fmt fmt-check vet test test-race test-e2e lint vuln license build-cross sanitize check release-snapshot
+.PHONY: help build compile link run install clean fmt fmt-check vet test test-race test-e2e lint vuln license build-cross sanitize check release-snapshot
 
 help:
 	@printf '%s\n' 'Rungrid developer workflow'
 	@printf '%s\n' ''
-	@printf '%s\n' '  make build             build ./bin/rungrid'
-	@printf '%s\n' '  make run ARGS="..."    build and run the CLI'
+	@printf '%s\n' '  make build             build and link rungrid into PREFIX/bin'
+	@printf '%s\n' '  make run ARGS="..."    build and run the repository binary'
 	@printf '%s\n' '  make install           install with the active Go toolchain'
 	@printf '%s\n' '  make clean             remove generated build and release output'
 	@printf '%s\n' '  make check             check format, vet, test, race, licenses, and builds'
@@ -21,11 +25,34 @@ help:
 	@printf '%s\n' '  make license           verify dependency license material'
 	@printf '%s\n' '  make release-snapshot  validate a local GoReleaser snapshot'
 
-build:
+build: link
+
+compile:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BINARY) $(CMD)
 
-run: build
+link: compile
+	@target="$(abspath $(BINARY))"; destination="$(GLOBAL_BINARY)"; \
+	if [ -L "$$destination" ] && [ "$$(readlink "$$destination")" = "$$target" ]; then \
+		printf 'linked %s -> %s\n' "$$destination" "$$target"; \
+		exit 0; \
+	fi; \
+	if [ -e "$$destination" ] && [ ! -L "$$destination" ]; then \
+		printf 'refusing to replace non-symlink %s\n' "$$destination" >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -d "$(GLOBAL_BIN_DIR)" ] && \
+		! mkdir -p "$(GLOBAL_BIN_DIR)" 2>/dev/null; then \
+		$(SUDO) mkdir -p "$(GLOBAL_BIN_DIR)"; \
+	fi; \
+	if [ -w "$(GLOBAL_BIN_DIR)" ]; then \
+		ln -sfn "$$target" "$$destination"; \
+	else \
+		$(SUDO) ln -sfn "$$target" "$$destination"; \
+	fi; \
+	printf 'linked %s -> %s\n' "$$destination" "$$target"
+
+run: compile
 	$(BINARY) $(ARGS)
 
 install:
@@ -70,7 +97,7 @@ build-cross:
 sanitize:
 	go test -run 'TestCLISpec(IsNeutral|DefinesV1Contract)' .
 
-check: fmt-check vet test test-race sanitize license build build-cross
+check: fmt-check vet test test-race sanitize license compile build-cross
 
 release-snapshot:
 	goreleaser check
