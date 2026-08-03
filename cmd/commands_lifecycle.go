@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/jamesonstone/rungrid/internal/errs"
 	"github.com/jamesonstone/rungrid/internal/lifecycle"
 	"github.com/jamesonstone/rungrid/internal/session"
 	"github.com/jamesonstone/rungrid/internal/state"
@@ -71,20 +69,26 @@ func newDownCommand(opt *options) *cobra.Command {
 	command := &cobra.Command{
 		Use: "down", Short: "Perform ordered workspace shutdown", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			active, err := opt.active(command.Context())
-			if err != nil {
-				if errs.Code(err) == errs.ExitConflict && strings.Contains(err.Error(), "no active") {
-					return nil
+			projectID := opt.projectID
+			if projectID == "" {
+				loaded, err := opt.load()
+				if err != nil {
+					return err
 				}
+				projectID = loaded.Manifest.Project.ID
+			}
+			layout, err := state.NewLayout(projectID, opt.stateDir)
+			if err != nil {
 				return err
 			}
-			ctx := command.Context()
+			ctx, stopSignals := signal.NotifyContext(command.Context(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+			defer stopSignals()
 			cancel := func() {}
 			if timeout > 0 {
 				ctx, cancel = context.WithTimeout(ctx, timeout)
 			}
 			defer cancel()
-			return lifecycle.Down(ctx, active)
+			return lifecycle.DownProject(ctx, layout)
 		},
 	}
 	command.Flags().DurationVar(&timeout, "timeout", 0, "overall shutdown timeout")

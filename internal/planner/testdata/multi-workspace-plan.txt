@@ -1,0 +1,28 @@
+Project: example-workspace-k7m4q2
+Generation: cc79eb8da87acca56b2b
+Manifest directory: .
+Workspace root: ..
+Terminal: headless
+
+Lifecycle:
+  before_up:
+    prepare-database (dir=control timeout=30s) argv=["example-infrastructure" "start" "database"]
+  after_down:
+    remove-infrastructure (dir=control timeout=30s) argv=["example-infrastructure" "stop"]
+  failure after prerequisites: stop runtime, then run all after_down commands
+
+Recovery: start; no recorded lifecycle generation
+
+Services:
+  database             external  workspace observed only
+  api                  native    tab       disabled until session ownership
+  web                  native    tab       disabled until session ownership
+
+Artifacts:
+  manifest.yaml
+  plan.json
+  process-compose.yaml
+  wrappers/api
+  wrappers/web
+
+Required executables: example-api, example-infrastructure, example-web, process-compose

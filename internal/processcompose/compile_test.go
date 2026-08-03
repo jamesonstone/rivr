@@ -29,7 +29,7 @@ func TestCompileMatchesGoldenAndProcessComposeSchema(t *testing.T) {
 	if string(compiled.Configuration) != string(expected) {
 		t.Fatalf("Process Compose output differs from golden\n--- got ---\n%s\n--- want ---\n%s", compiled.Configuration, expected)
 	}
-	if strings.Contains(string(compiled.Configuration), loaded.Root) {
+	if strings.Contains(string(compiled.Configuration), loaded.WorkspaceRoot) {
 		t.Fatal("generated configuration persisted an absolute workspace path")
 	}
 	if !strings.Contains(string(compiled.Wrappers["api"]), "internal exec-service --project-id example-workspace-k7m4q2") {

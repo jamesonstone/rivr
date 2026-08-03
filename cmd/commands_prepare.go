@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jamesonstone/rungrid/internal/doctor"
 	"github.com/jamesonstone/rungrid/internal/errs"
@@ -9,6 +12,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/lifecycle"
 	"github.com/jamesonstone/rungrid/internal/output"
 	"github.com/jamesonstone/rungrid/internal/planner"
+	"github.com/jamesonstone/rungrid/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -59,6 +63,14 @@ func newPlanCommand(opt *options) *cobra.Command {
 				return err
 			}
 			plan := planner.Build(loaded, Version)
+			layout, err := state.NewLayout(loaded.Manifest.Project.ID, opt.stateDir)
+			if err != nil {
+				return err
+			}
+			plan.Recovery, err = planner.InspectRecovery(layout, plan)
+			if err != nil {
+				return err
+			}
 			if opt.json || format == "json" {
 				return output.WriteJSON(command.OutOrStdout(), "Plan", loaded.Manifest.Project.ID, plan, nil)
 			}
@@ -119,7 +131,9 @@ func newUpCommand(opt *options) *cobra.Command {
 				return err
 			}
 			open := loaded.Manifest.Terminal.Open != nil && *loaded.Manifest.Terminal.Open && !noOpen
-			result, err := lifecycle.Up(command.Context(), loaded, lifecycle.UpOptions{
+			ctx, cancel := signal.NotifyContext(command.Context(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+			defer cancel()
+			result, err := lifecycle.Up(ctx, loaded, lifecycle.UpOptions{
 				StateOverride: opt.stateDir, GeneratorVersion: Version, Headless: headless, Open: open, Requested: args,
 			})
 			if err != nil {

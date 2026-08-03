@@ -98,7 +98,7 @@ func TestDraftResumeRequiresMatchingDiscovery(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	draftPath := filepath.Join(root, ".rungrid.draft.json")
-	draft := Draft{APIVersion: "rungrid/output/v1", FlowVersion: 2, DiscoveryHash: "old", Name: "Draft", Terminal: "headless", Environment: "none", LinkDependencies: true, Selected: []bool{true}, Screen: 3}
+	draft := Draft{APIVersion: "rungrid/output/v1", FlowVersion: 3, DiscoveryHash: "old", Name: "Draft", Terminal: "headless", Environment: "none", LinkDependencies: true, Selected: []bool{true}, Screen: 3}
 	content, _ := json.Marshal(draft)
 	mustWrite(t, draftPath, string(content))
 	candidates := []Candidate{{Name: "api", Source: "native", Confidence: "high"}}
@@ -167,6 +167,33 @@ func TestNonInteractiveInitWritesPortableManifestAndIgnoresLocalFiles(t *testing
 		if !strings.Contains(string(ignore), required) {
 			t.Errorf("gitignore is missing %s", required)
 		}
+	}
+}
+
+func TestNonInteractiveInitDiscoversFromParentWorkspaceRoot(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	control := filepath.Join(workspace, "control")
+	if err := os.MkdirAll(control, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(workspace, "compose.yaml"), "services:\n  database:\n    image: example/database\n")
+	destination := filepath.Join(control, ".rungrid.yaml")
+	result, err := NonInteractive(Options{
+		Root: control, WorkspaceRoot: "..", Destination: destination, FromCompose: "compose.yaml",
+	}, nil, "Example Workspace", "headless")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.Workspace.Root != ".." || len(result.Manifest.Services) != 1 {
+		t.Fatalf("parent workspace discovery failed: %#v", result.Manifest)
+	}
+	content, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(content), workspace) {
+		t.Fatal("onboarding persisted an absolute workspace path")
 	}
 }
 

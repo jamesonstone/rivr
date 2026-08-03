@@ -14,7 +14,7 @@ import (
 
 func newInitCommand(opt *options) *cobra.Command {
 	var nonInteractive, force bool
-	var inputPath, name, terminal, fromCompose string
+	var inputPath, name, terminal, fromCompose, workspaceRoot string
 	command := &cobra.Command{
 		Use:   "init",
 		Short: "Create a portable workspace manifest",
@@ -27,7 +27,8 @@ func newInitCommand(opt *options) *cobra.Command {
 			root := filepath.Dir(destination)
 			options := onboarding.Options{
 				Root: root, Destination: destination, DraftPath: filepath.Join(root, ".rungrid.draft.json"),
-				Force: force, FromCompose: fromCompose, Input: command.InOrStdin(), Output: command.OutOrStdout(), ErrorOutput: command.ErrOrStderr(),
+				WorkspaceRoot: workspaceRoot,
+				Force:         force, FromCompose: fromCompose, Input: command.InOrStdin(), Output: command.OutOrStdout(), ErrorOutput: command.ErrOrStderr(),
 			}
 			var result onboarding.Result
 			if nonInteractive {
@@ -66,6 +67,7 @@ func newInitCommand(opt *options) *cobra.Command {
 	command.Flags().StringVar(&name, "name", "", "project name for non-interactive discovery")
 	command.Flags().StringVar(&terminal, "terminal", "", "terminal mode: warp or headless")
 	command.Flags().StringVar(&fromCompose, "from-compose", "", "workspace-relative Compose file to discover")
+	command.Flags().StringVar(&workspaceRoot, "workspace-root", ".", "portable workspace root relative to the manifest directory")
 	command.Flags().BoolVar(&force, "force", false, "replace an existing manifest after explicit selection")
 	return command
 }

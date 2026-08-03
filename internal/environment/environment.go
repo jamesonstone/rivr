@@ -20,12 +20,24 @@ import (
 const maxProviderOutput = 4 << 20
 
 func Resolve(ctx context.Context, service *manifest.Service, root string) ([]string, map[string]string, error) {
-	values := parseEnvironment(os.Environ())
 	workingDirectory := filepath.Join(root, service.WorkingDirectory)
-	for _, provider := range service.Environment.Providers {
+	return ResolveEnvironment(ctx, service.Environment, workingDirectory, root)
+}
+
+func ResolveEnvironment(
+	ctx context.Context,
+	configuration manifest.Environment,
+	workingDirectory string,
+	workspaceRoot string,
+) ([]string, map[string]string, error) {
+	values := parseEnvironment(os.Environ())
+	for _, provider := range configuration.Providers {
 		switch provider.Type {
 		case "dotenv":
 			filename := filepath.Join(workingDirectory, provider.Path)
+			if err := ensureProviderPath(workspaceRoot, filename, provider.Optional); err != nil {
+				return nil, nil, err
+			}
 			content, err := os.ReadFile(filename)
 			if err != nil {
 				if provider.Optional && os.IsNotExist(err) {
@@ -49,6 +61,10 @@ func Resolve(ctx context.Context, service *manifest.Service, root string) ([]str
 		case "direnv":
 			providerContext, cancel := context.WithTimeout(ctx, provider.Timeout.Duration)
 			directory := filepath.Join(workingDirectory, provider.Directory)
+			if err := ensureProviderPath(workspaceRoot, directory, false); err != nil {
+				cancel()
+				return nil, nil, err
+			}
 			providerValues, err := runDirenv(providerContext, directory, values)
 			cancel()
 			if err != nil {
@@ -59,8 +75,36 @@ func Resolve(ctx context.Context, service *manifest.Service, root string) ([]str
 			return nil, nil, errs.New(errs.ExitUsage, "RG502", "unsupported environment provider")
 		}
 	}
-	merge(values, service.Environment.Values)
+	merge(values, configuration.Values)
 	return flatten(values), values, nil
+}
+
+func ensureProviderPath(root, candidate string, optional bool) error {
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return errs.Wrap(errs.ExitConflict, "RG514", "resolve environment provider workspace root", err)
+	}
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil && optional && os.IsNotExist(err) {
+		resolvedParent, parentErr := filepath.EvalSymlinks(filepath.Dir(candidate))
+		if parentErr != nil {
+			return errs.Wrap(errs.ExitConflict, "RG511", "resolve optional environment provider parent", parentErr)
+		}
+		resolved = filepath.Join(resolvedParent, filepath.Base(candidate))
+		err = nil
+	}
+	if err != nil {
+		return errs.Wrap(errs.ExitConflict, "RG512", "resolve environment provider path", err)
+	}
+	if !pathWithin(resolvedRoot, resolved) {
+		return errs.New(errs.ExitConflict, "RG513", "environment provider path resolves outside the workspace")
+	}
+	return nil
+}
+
+func pathWithin(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }
 
 func parseDotenv(content []byte) (map[string]string, error) {

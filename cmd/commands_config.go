@@ -99,13 +99,27 @@ func redactManifest(value manifest.Manifest) manifest.Manifest {
 	copyValue := value
 	copyValue.Services = append([]manifest.Service(nil), value.Services...)
 	for i := range copyValue.Services {
-		if len(copyValue.Services[i].Environment.Values) > 0 {
-			redacted := map[string]string{}
-			for key := range copyValue.Services[i].Environment.Values {
-				redacted[key] = "<redacted>"
-			}
-			copyValue.Services[i].Environment.Values = redacted
-		}
+		copyValue.Services[i].Environment = redactedEnvironment(copyValue.Services[i].Environment)
+	}
+	copyValue.Lifecycle.BeforeUp = append([]manifest.LifecycleCommand(nil), value.Lifecycle.BeforeUp...)
+	for i := range copyValue.Lifecycle.BeforeUp {
+		copyValue.Lifecycle.BeforeUp[i].Environment = redactedEnvironment(copyValue.Lifecycle.BeforeUp[i].Environment)
+	}
+	copyValue.Lifecycle.AfterDown = append([]manifest.LifecycleCommand(nil), value.Lifecycle.AfterDown...)
+	for i := range copyValue.Lifecycle.AfterDown {
+		copyValue.Lifecycle.AfterDown[i].Environment = redactedEnvironment(copyValue.Lifecycle.AfterDown[i].Environment)
+	}
+	return copyValue
+}
+
+func redactedEnvironment(value manifest.Environment) manifest.Environment {
+	if len(value.Values) == 0 {
+		return value
+	}
+	copyValue := value
+	copyValue.Values = make(map[string]string, len(value.Values))
+	for key := range value.Values {
+		copyValue.Values[key] = "<redacted>"
 	}
 	return copyValue
 }

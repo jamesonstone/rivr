@@ -1,0 +1,54 @@
+api_version: rungrid/v1
+kind: Workspace
+project:
+  name: Example Workspace
+  slug: example-workspace
+  id: example-workspace-k7m4q2
+workspace:
+  root: ..
+runtime:
+  startup_timeout: 10s
+  shutdown_timeout: 5s
+terminal:
+  mode: headless
+  open: false
+lifecycle:
+  before_up:
+    - name: prepare-database
+      working_directory: control
+      timeout: 30s
+      run:
+        argv: [example-infrastructure, start, database]
+  after_down:
+    - name: remove-infrastructure
+      working_directory: control
+      timeout: 30s
+      run:
+        argv: [example-infrastructure, stop]
+services:
+  - name: database
+    source: external
+    activation: workspace
+    external:
+      command:
+        argv: [database-ready, --quiet]
+  - name: api
+    source: native
+    activation: tab
+    working_directory: api
+    run:
+      argv: [example-api, serve]
+    terminal:
+      trigger_argv: [make, dev]
+    depends_on:
+      database: running
+  - name: web
+    source: native
+    activation: tab
+    working_directory: web
+    run:
+      argv: [example-web, serve]
+    terminal:
+      trigger_argv: [npm, run, dev]
+    depends_on:
+      api: running

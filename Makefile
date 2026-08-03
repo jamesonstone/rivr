@@ -8,6 +8,7 @@ GLOBAL_BIN_DIR := $(PREFIX)/bin
 GLOBAL_BINARY := $(GLOBAL_BIN_DIR)/rungrid
 SUDO ?= sudo
 ARGS ?=
+GO_FILES := $(shell find . -type f -name '*.go' -not -path './vendor/*')
 
 .PHONY: help build compile link run install clean fmt fmt-check vet test test-race test-e2e lint vuln license build-cross sanitize check release-snapshot
 
@@ -62,10 +63,10 @@ clean:
 	rm -rf $(BIN_DIR) dist
 
 fmt:
-	gofmt -w main.go cmd internal *_test.go
+	gofmt -w $(GO_FILES)
 
 fmt-check:
-	@test -z "$$(gofmt -l main.go cmd internal *_test.go)"
+	@test -z "$$(gofmt -l $(GO_FILES))"
 
 vet:
 	go vet ./...
@@ -77,7 +78,7 @@ test-race:
 	go test -race ./...
 
 test-e2e:
-	RUNGRID_E2E=1 go test -run TestHeadlessLifecycleEndToEnd -count=1 ./tests/end-to-end/local
+	RUNGRID_E2E=1 go test -run 'Test(Headless|TabOnly)LifecycleEndToEnd' -count=1 ./tests/end-to-end/local
 
 lint:
 	golangci-lint run ./...

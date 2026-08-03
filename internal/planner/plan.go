@@ -12,15 +12,20 @@ import (
 )
 
 type Plan struct {
-	APIVersion     string        `json:"api_version"`
-	ProjectID      string        `json:"project_id"`
-	GenerationID   string        `json:"generation_id"`
-	ManifestSHA256 string        `json:"manifest_sha256"`
-	Services       []ServicePlan `json:"services"`
-	Artifacts      []string      `json:"artifacts"`
-	Executables    []string      `json:"executables"`
-	TerminalMode   string        `json:"terminal_mode"`
-	OpenTerminal   bool          `json:"open_terminal"`
+	APIVersion        string        `json:"api_version"`
+	ProjectID         string        `json:"project_id"`
+	GenerationID      string        `json:"generation_id"`
+	ManifestSHA256    string        `json:"manifest_sha256"`
+	LifecycleSHA256   string        `json:"lifecycle_sha256"`
+	ManifestDirectory string        `json:"manifest_directory"`
+	WorkspaceRoot     string        `json:"workspace_root"`
+	Lifecycle         LifecyclePlan `json:"lifecycle"`
+	Services          []ServicePlan `json:"services"`
+	Artifacts         []string      `json:"artifacts"`
+	Executables       []string      `json:"executables"`
+	TerminalMode      string        `json:"terminal_mode"`
+	OpenTerminal      bool          `json:"open_terminal"`
+	Recovery          *RecoveryPlan `json:"recovery,omitempty"`
 }
 
 type ServicePlan struct {
@@ -36,11 +41,16 @@ type ServicePlan struct {
 func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 	manifestHash := state.Hash(loaded.MergedYAML)
 	generationHash := state.Hash(loaded.MergedYAML, []byte(generatorVersion))
+	lifecycle, lifecycleHash := buildLifecyclePlan(&loaded.Manifest)
 	plan := Plan{
-		APIVersion:     "rungrid/output/v1",
-		ProjectID:      loaded.Manifest.Project.ID,
-		GenerationID:   generationHash[:20],
-		ManifestSHA256: manifestHash,
+		APIVersion:        "rungrid/output/v1",
+		ProjectID:         loaded.Manifest.Project.ID,
+		GenerationID:      generationHash[:20],
+		ManifestSHA256:    manifestHash,
+		LifecycleSHA256:   lifecycleHash,
+		ManifestDirectory: ".",
+		WorkspaceRoot:     loaded.Manifest.Workspace.Root,
+		Lifecycle:         lifecycle,
 		Artifacts: []string{
 			"manifest.yaml",
 			"plan.json",
@@ -56,6 +66,7 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 		)
 	}
 	executables := map[string]bool{loaded.Manifest.Runtime.ProcessCompose.Executable: true}
+	addLifecycleExecutables(executables, &loaded.Manifest)
 	if loaded.Manifest.Terminal.Mode == "warp" {
 		executables["zsh"] = true
 	}
@@ -85,11 +96,11 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 		}
 		if service.Activation == "tab" {
 			item.Actions = append(item.Actions, "wait for exclusive service session")
-			plan.Artifacts = append(plan.Artifacts,
-				fmt.Sprintf("terminal/warp/%02d_%s.toml.tmpl", tabIndex, service.Name),
-				"wrappers/"+service.Name,
-			)
-			tabIndex++
+			if loaded.Manifest.Terminal.Mode == "warp" {
+				plan.Artifacts = append(plan.Artifacts, fmt.Sprintf("terminal/warp/%02d_%s.toml.tmpl", tabIndex, service.Name))
+				tabIndex++
+			}
+			plan.Artifacts = append(plan.Artifacts, "wrappers/"+service.Name)
 		} else if service.Source != "external" {
 			plan.Artifacts = append(plan.Artifacts, "wrappers/"+service.Name)
 		}
@@ -121,7 +132,31 @@ func (p Plan) JSON() ([]byte, error) {
 }
 
 func (p Plan) WriteHuman(w io.Writer) {
-	_, _ = fmt.Fprintf(w, "Project: %s\nGeneration: %s\nTerminal: %s\n\n", p.ProjectID, p.GenerationID, p.TerminalMode)
+	_, _ = fmt.Fprintf(
+		w,
+		"Project: %s\nGeneration: %s\nManifest directory: %s\nWorkspace root: %s\nTerminal: %s\n\n",
+		p.ProjectID,
+		p.GenerationID,
+		p.ManifestDirectory,
+		p.WorkspaceRoot,
+		p.TerminalMode,
+	)
+	p.Lifecycle.writeHuman(w)
+	if p.Recovery != nil {
+		if p.Recovery.Generation == "" {
+			_, _ = fmt.Fprintln(w, "Recovery: start; no recorded lifecycle generation")
+			_, _ = fmt.Fprintln(w)
+		} else {
+			_, _ = fmt.Fprintf(
+				w,
+				"Recovery: %s; recorded generation %s is %s (teardown-required=%t)\n\n",
+				p.Recovery.Action,
+				p.Recovery.Generation,
+				p.Recovery.State,
+				p.Recovery.TeardownRequired,
+			)
+		}
+	}
 	_, _ = fmt.Fprintln(w, "Services:")
 	for _, service := range p.Services {
 		stateText := "enabled"

@@ -12,9 +12,11 @@ func Schema() []byte {
     "api_version": {"const": "rungrid/v1"},
     "kind": {"const": "Workspace"},
     "project": {"$ref": "#/$defs/project"},
+    "workspace": {"$ref": "#/$defs/workspace"},
     "imports": {"type": "array", "items": {"type": "string"}},
     "runtime": {"$ref": "#/$defs/runtime"},
     "terminal": {"$ref": "#/$defs/terminal"},
+    "lifecycle": {"$ref": "#/$defs/lifecycle"},
     "services": {"type": "array", "items": {"$ref": "#/$defs/service"}}
   },
   "$defs": {
@@ -38,6 +40,11 @@ func Schema() []byte {
         "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
         "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*-[a-z2-7]{6}$"}
       }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"root": {"type": "string", "minLength": 1}}
     },
     "runtime": {
       "type": "object",
@@ -76,6 +83,34 @@ func Schema() []byte {
         "argv": {"$ref": "#/$defs/argv"},
         "timeout": {"type": "string"},
         "directory": {"type": "string"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "values": {"type": "object", "additionalProperties": {"type": "string"}},
+        "providers": {"type": "array", "items": {"$ref": "#/$defs/provider"}}
+      }
+    },
+    "lifecycle_command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "run"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "working_directory": {"type": "string"},
+        "timeout": {"type": "string"},
+        "run": {"$ref": "#/$defs/command"},
+        "environment": {"$ref": "#/$defs/environment"}
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "before_up": {"type": "array", "items": {"$ref": "#/$defs/lifecycle_command"}},
+        "after_down": {"type": "array", "items": {"$ref": "#/$defs/lifecycle_command"}}
       }
     },
     "health": {
@@ -123,14 +158,7 @@ func Schema() []byte {
           "additionalProperties": false,
           "properties": {"url": {"type": "string", "format": "uri"}, "command": {"$ref": "#/$defs/command"}}
         },
-        "environment": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "values": {"type": "object", "additionalProperties": {"type": "string"}},
-            "providers": {"type": "array", "items": {"$ref": "#/$defs/provider"}}
-          }
-        },
+        "environment": {"$ref": "#/$defs/environment"},
         "depends_on": {"type": "object", "additionalProperties": {"enum": ["running", "healthy", "completed_successfully"]}},
         "health": {"$ref": "#/$defs/health"},
         "restart": {

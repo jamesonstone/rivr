@@ -8,30 +8,27 @@ import (
 	"path/filepath"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
-	"github.com/jamesonstone/rungrid/internal/manifest"
 	"github.com/jamesonstone/rungrid/internal/state"
-	"github.com/jamesonstone/rungrid/internal/supervisor"
 	"github.com/jamesonstone/rungrid/internal/warp"
+	"github.com/jamesonstone/rungrid/internal/workspace"
 )
 
 func Uninstall(ctx context.Context, layout state.Layout, keepLogs, keepConfig bool) error {
 	if err := layout.VerifyMarker(); err != nil {
 		return err
 	}
-	if runtimeState, err := supervisor.Read(layout); err == nil {
-		if err := supervisor.Verify(ctx, layout, runtimeState); err != nil {
-			return err
-		}
-		manifestPath := filepath.Join(layout.ProjectDir, "generations", runtimeState.GenerationID, "manifest.yaml")
-		generatedManifest, err := manifest.LoadGenerated(manifestPath, runtimeState.WorkspaceRoot)
-		if err != nil {
-			return err
-		}
-		if err := Down(ctx, Active{Layout: layout, Runtime: runtimeState, Manifest: generatedManifest}); err != nil {
-			return err
-		}
-	} else if !os.IsNotExist(err) {
+	lock, err := workspace.Acquire(ctx, layout)
+	if err != nil {
 		return err
+	}
+	defer func() { _ = lock.Release() }()
+	if err := downProjectLocked(ctx, layout); err != nil {
+		return err
+	}
+	if journal, exists, err := workspace.ReadJournalIfPresent(layout); err != nil {
+		return err
+	} else if exists && (journal.TeardownRequired || journal.State == workspace.StateCleanup) {
+		return errs.New(errs.ExitPartial, "RG1127", "refusing to uninstall while workspace cleanup remains required")
 	}
 	if err := warp.Uninstall(layout); err != nil {
 		return err
@@ -79,10 +76,10 @@ func uninstallPreserving(layout state.Layout, keepLogs, keepConfig bool) error {
 	}
 	remove := []string{"sessions", "tabs", "locks", "terminal-install.json", "runtime.json", "runtime.sock"}
 	if !keepConfig {
-		remove = append(remove, "generations", "current")
+		remove = append(remove, "generations", "current", "lifecycle.json")
 	}
 	if !keepLogs {
-		remove = append(remove, "process-compose.log", "client.log", "preserved-logs")
+		remove = append(remove, "process-compose.log", "client.log", "preserved-logs", "lifecycle-logs")
 	}
 	for _, name := range remove {
 		target := filepath.Join(layout.ProjectDir, name)

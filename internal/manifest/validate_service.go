@@ -69,14 +69,20 @@ func validateExternal(external *External, prefix string, add func(string, string
 	}
 }
 
-func validateEnvironment(root string, service *Service, prefix string, add func(string, string)) {
-	for key := range service.Environment.Values {
+func validateEnvironment(
+	root string,
+	environment Environment,
+	workingDirectory string,
+	prefix string,
+	add func(string, string),
+) {
+	for key := range environment.Values {
 		if secretKeyPattern.MatchString(key) {
-			add(prefix+".environment.values."+key, "secret-like keys must use an execution-time environment provider")
+			add(prefix+".values."+key, "secret-like keys must use an execution-time environment provider")
 		}
 	}
-	for i, provider := range service.Environment.Providers {
-		field := fmt.Sprintf("%s.environment.providers[%d]", prefix, i)
+	for i, provider := range environment.Providers {
+		field := fmt.Sprintf("%s.providers[%d]", prefix, i)
 		switch provider.Type {
 		case "dotenv":
 			if provider.Path == "" {
@@ -84,7 +90,7 @@ func validateEnvironment(root string, service *Service, prefix string, add func(
 			} else if filepath.IsAbs(provider.Path) {
 				add(field+".path", "must be workspace-relative")
 			} else {
-				candidate := filepath.Join(root, service.WorkingDirectory, provider.Path)
+				candidate := filepath.Join(root, workingDirectory, provider.Path)
 				if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
 					if !within(root, resolved) {
 						add(field+".path", "resolves outside the workspace")
@@ -102,7 +108,7 @@ func validateEnvironment(root string, service *Service, prefix string, add func(
 			if provider.Directory == "" {
 				add(field+".directory", "is required")
 			} else {
-				validateWorkingDirectory(root, filepath.Join(service.WorkingDirectory, provider.Directory), field+".directory", add)
+				validateWorkingDirectory(root, filepath.Join(workingDirectory, provider.Directory), field+".directory", add)
 			}
 		default:
 			add(field+".type", "must be dotenv, command, or direnv")

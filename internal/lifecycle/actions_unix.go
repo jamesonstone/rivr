@@ -5,8 +5,6 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -81,46 +79,6 @@ func Stop(ctx context.Context, active Active, serviceName string) error {
 		return errs.New(errs.ExitUsage, "RG1112", "Rungrid does not own external service lifecycle")
 	}
 	return supervisor.Client(active.Layout, active.Runtime).Stop(ctx, serviceName)
-}
-
-func Down(ctx context.Context, active Active) error {
-	markerRelative := filepath.Join("locks", "down-"+active.Runtime.GenerationID+".json")
-	marker := []byte(fmt.Sprintf("{\"api_version\":\"rungrid/output/v1\",\"project_id\":%q,\"generation_id\":%q}\n", active.Layout.ProjectID, active.Runtime.GenerationID))
-	if err := state.WriteFileAtomic(active.Layout.ProjectDir, markerRelative, marker, 0o600); err != nil {
-		return err
-	}
-	markerPath := filepath.Join(active.Layout.ProjectDir, markerRelative)
-	defer func() { _ = os.Remove(markerPath) }()
-
-	client := supervisor.Client(active.Layout, active.Runtime)
-	var failures []string
-	for i := len(active.Manifest.Services) - 1; i >= 0; i-- {
-		service := &active.Manifest.Services[i]
-		if service.Source == "external" {
-			continue
-		}
-		if current, err := client.Get(ctx, service.Name); err == nil && !shouldStop(current.Status) {
-			continue
-		}
-		if err := client.Stop(ctx, service.Name); err != nil && !isAlreadyStopped(err) {
-			failures = append(failures, service.Name+": "+err.Error())
-		}
-	}
-	for i := len(active.Manifest.Services) - 1; i >= 0; i-- {
-		service := &active.Manifest.Services[i]
-		if service.Source == "compose" {
-			if err := serviceexec.ComposeShutdown(service, active.Runtime.WorkspaceRoot, ctx); err != nil {
-				failures = append(failures, service.Name+": "+err.Error())
-			}
-		}
-	}
-	if err := supervisor.Stop(ctx, active.Layout, active.Runtime); err != nil {
-		failures = append(failures, "runtime: "+err.Error())
-	}
-	if len(failures) > 0 {
-		return errs.New(errs.ExitPartial, "RG1113", "partial workspace shutdown:\n  - "+strings.Join(failures, "\n  - "))
-	}
-	return nil
 }
 
 func waitForService(ctx context.Context, client processcompose.Client, layout state.Layout, generationID string, service *manifest.Service) error {

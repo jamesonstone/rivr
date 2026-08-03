@@ -5,7 +5,9 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
 	"github.com/jamesonstone/rungrid/internal/manifest"
@@ -14,7 +16,30 @@ import (
 	"github.com/jamesonstone/rungrid/internal/state"
 	"github.com/jamesonstone/rungrid/internal/supervisor"
 	"github.com/jamesonstone/rungrid/internal/terminalshell"
+	"github.com/jamesonstone/rungrid/internal/workspace"
 )
+
+type WorkspaceStatus struct {
+	ProjectID  string                    `json:"project_id"`
+	Runtime    string                    `json:"runtime"`
+	Generation string                    `json:"generation,omitempty"`
+	PID        int                       `json:"pid,omitempty"`
+	Socket     string                    `json:"socket,omitempty"`
+	Lifecycle  *WorkspaceLifecycleStatus `json:"lifecycle,omitempty"`
+	Services   []ServiceStatus           `json:"services"`
+}
+
+type WorkspaceLifecycleStatus struct {
+	State            string                    `json:"state"`
+	Generation       string                    `json:"generation"`
+	ManifestSHA256   string                    `json:"manifest_sha256"`
+	LifecycleSHA256  string                    `json:"lifecycle_sha256"`
+	HashesCompatible bool                      `json:"hashes_compatible"`
+	TeardownRequired bool                      `json:"teardown_required"`
+	CompletedBefore  []string                  `json:"completed_before_up"`
+	CleanupFailure   string                    `json:"cleanup_failure,omitempty"`
+	LastFailure      *workspace.CommandOutcome `json:"last_failed_command,omitempty"`
+}
 
 func Logs(ctx context.Context, active Active, services []string, follow bool, tail int, raw bool, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(services) == 0 {
@@ -69,6 +94,74 @@ func Status(ctx context.Context, active Active) ([]ServiceStatus, json.RawMessag
 		result = append(result, item)
 	}
 	return result, raw, nil
+}
+
+func InspectStatus(ctx context.Context, layout state.Layout) (WorkspaceStatus, error) {
+	result := WorkspaceStatus{ProjectID: layout.ProjectID, Runtime: "inactive", Services: []ServiceStatus{}}
+	journal, hasJournal, err := workspace.ReadJournalIfPresent(layout)
+	if err != nil {
+		return result, err
+	}
+	if hasJournal {
+		if _, loadErr := journalManifest(layout, journal); loadErr != nil {
+			return result, loadErr
+		}
+		result.Generation = journal.GenerationID
+		result.Lifecycle = &WorkspaceLifecycleStatus{
+			State: journal.State, Generation: journal.GenerationID,
+			ManifestSHA256: journal.ManifestSHA256, LifecycleSHA256: journal.LifecycleSHA256,
+			HashesCompatible: true,
+			TeardownRequired: journal.TeardownRequired,
+			CompletedBefore:  append([]string(nil), journal.CompletedBefore...),
+			CleanupFailure:   journal.CleanupFailure,
+		}
+		for index := len(journal.Outcomes) - 1; index >= 0; index-- {
+			if journal.Outcomes[index].Status != "succeeded" {
+				failure := journal.Outcomes[index]
+				result.Lifecycle.LastFailure = &failure
+				break
+			}
+		}
+	}
+	runtimeState, err := supervisor.Read(layout)
+	if errors.Is(err, os.ErrNotExist) {
+		if hasJournal {
+			configuration, loadErr := journalManifest(layout, journal)
+			if loadErr != nil {
+				return result, loadErr
+			}
+			for _, service := range configuration.Services {
+				status := "inactive"
+				if service.Source == "external" {
+					status = "external"
+				}
+				result.Services = append(result.Services, ServiceStatus{
+					Name: service.Name, Source: service.Source, Activation: service.Activation, Status: status,
+				})
+			}
+		}
+		return result, nil
+	}
+	if err != nil {
+		return result, err
+	}
+	if err := supervisor.Verify(ctx, layout, runtimeState); err != nil {
+		return result, err
+	}
+	configuration, _, err := runtimeManifest(layout, runtimeState)
+	if err != nil {
+		return result, err
+	}
+	services, _, err := Status(ctx, Active{Layout: layout, Runtime: runtimeState, Manifest: configuration})
+	if err != nil {
+		return result, err
+	}
+	result.Runtime = "active"
+	result.Generation = runtimeState.GenerationID
+	result.PID = runtimeState.PID
+	result.Socket = runtimeState.Socket
+	result.Services = services
+	return result, nil
 }
 
 func SessionActive(layout state.Layout, generationID, service string) bool {
