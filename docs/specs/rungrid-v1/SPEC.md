@@ -234,7 +234,8 @@ Local validation completed on macOS with Process Compose 1.120.0:
   and Process Compose remains the managed-service lifecycle authority.
 - A follow-up real headless run after Process Compose log-level and structured
   executable discovery changes passed both mixed-service and tab-only suites;
-  ignored evidence is recorded as run `20260803T152058Z-082251`.
+  clean-source ignored evidence is recorded as run
+  `20260803T152616Z-051963` at commit `5d62241`.
 - `make build` was exercised under a temporary writable prefix and produced an
   exact `bin/rungrid` symlink. The existing `/usr/local/bin/rungrid` link uses
   the same canonical-repository layout as `kit`, `yp`, and `kp`; no
