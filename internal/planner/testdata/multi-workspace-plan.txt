@@ -1,5 +1,5 @@
 Project: example-workspace-k7m4q2
-Generation: cc79eb8da87acca56b2b
+Generation: 8aa31583111a35bafc1f
 Manifest directory: .
 Workspace root: ..
 Terminal: headless
@@ -11,12 +11,17 @@ Lifecycle:
     remove-infrastructure (dir=control timeout=30s) argv=["example-infrastructure" "stop"]
   failure after prerequisites: stop runtime, then run all after_down commands
 
+Repositories:
+  workspace            .
+  api                  api
+  web                  web
+
 Recovery: start; no recorded lifecycle generation
 
 Services:
-  database             external  workspace observed only
-  api                  native    tab       disabled until session ownership
-  web                  native    tab       disabled until session ownership
+  database             workspace    external  workspace observed only
+  api                  api          native    tab       disabled until session ownership
+  web                  web          native    tab       disabled until session ownership
 
 Artifacts:
   manifest.yaml

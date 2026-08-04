@@ -8,7 +8,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/jamesonstone/rungrid/internal/manifest"
+	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/subprocess"
+	"github.com/jamesonstone/rungrid/internal/supervisor"
 )
 
 func TestListeningPortsParsesAndSortsLsofOutput(t *testing.T) {
@@ -46,6 +49,50 @@ func TestGitVersionReportsBranchCommitCleanDirtyAndWorktree(t *testing.T) {
 	_, _, stateValue, _ = gitVersion(context.Background(), directory)
 	if stateValue != "dirty" {
 		t.Fatalf("expected dirty state, got %q", stateValue)
+	}
+}
+
+func TestCaptureUsesEachServiceRepository(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	for _, name := range []string{"backend", "frontend"} {
+		directory := filepath.Join(workspace, name)
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		runGitTest(t, directory, "init", "-b", "main")
+		runGitTest(t, directory, "config", "user.name", "Example User")
+		runGitTest(t, directory, "config", "user.email", "example@example.invalid")
+		if err := os.WriteFile(filepath.Join(directory, "README.md"), []byte(name+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		runGitTest(t, directory, "add", "README.md")
+		runGitTest(t, directory, "commit", "-m", "initial")
+	}
+	clientExecutable := filepath.Join(workspace, "process-compose")
+	if err := os.WriteFile(clientExecutable, []byte("#!/bin/sh\nprintf '[{\"name\":\"backend\",\"status\":\"Running\"},{\"name\":\"frontend\",\"status\":\"Running\"}]\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m := &manifest.Manifest{
+		Repositories: map[string]manifest.Repository{
+			"backend":  {Path: "backend"},
+			"frontend": {Path: "frontend"},
+		},
+		Services: []manifest.Service{
+			{Name: "backend", Repository: "backend", Source: "native", WorkingDirectory: "."},
+			{Name: "frontend", Repository: "frontend", Source: "native", WorkingDirectory: "."},
+		},
+	}
+	snapshot := Capture(context.Background(), m, supervisor.Runtime{WorkspaceRoot: workspace, GenerationID: "generation"}, processcompose.Client{
+		Executable: clientExecutable, Socket: "socket", LogFile: "log", WorkDir: workspace,
+	})
+	if len(snapshot.Services) != 2 {
+		t.Fatalf("unexpected snapshot: %#v", snapshot)
+	}
+	for _, service := range snapshot.Services {
+		if service.Repository != service.Name || service.Worktree != service.Name || service.GitState != "clean" {
+			t.Fatalf("service repository state changed: %#v", service)
+		}
 	}
 }
 

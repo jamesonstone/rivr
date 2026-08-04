@@ -12,30 +12,37 @@ import (
 )
 
 type Plan struct {
-	APIVersion        string        `json:"api_version"`
-	ProjectID         string        `json:"project_id"`
-	GenerationID      string        `json:"generation_id"`
-	ManifestSHA256    string        `json:"manifest_sha256"`
-	LifecycleSHA256   string        `json:"lifecycle_sha256"`
-	ManifestDirectory string        `json:"manifest_directory"`
-	WorkspaceRoot     string        `json:"workspace_root"`
-	Lifecycle         LifecyclePlan `json:"lifecycle"`
-	Services          []ServicePlan `json:"services"`
-	Artifacts         []string      `json:"artifacts"`
-	Executables       []string      `json:"executables"`
-	TerminalMode      string        `json:"terminal_mode"`
-	OpenTerminal      bool          `json:"open_terminal"`
-	Recovery          *RecoveryPlan `json:"recovery,omitempty"`
+	APIVersion        string           `json:"api_version"`
+	ProjectID         string           `json:"project_id"`
+	GenerationID      string           `json:"generation_id"`
+	ManifestSHA256    string           `json:"manifest_sha256"`
+	LifecycleSHA256   string           `json:"lifecycle_sha256"`
+	ManifestDirectory string           `json:"manifest_directory"`
+	WorkspaceRoot     string           `json:"workspace_root"`
+	Repositories      []RepositoryPlan `json:"repositories"`
+	Lifecycle         LifecyclePlan    `json:"lifecycle"`
+	Services          []ServicePlan    `json:"services"`
+	Artifacts         []string         `json:"artifacts"`
+	Executables       []string         `json:"executables"`
+	TerminalMode      string           `json:"terminal_mode"`
+	OpenTerminal      bool             `json:"open_terminal"`
+	Recovery          *RecoveryPlan    `json:"recovery,omitempty"`
 }
 
 type ServicePlan struct {
 	Name         string            `json:"name"`
+	Repository   string            `json:"repository"`
 	Source       string            `json:"source"`
 	Activation   string            `json:"activation"`
 	Process      bool              `json:"process_compose_process"`
 	Disabled     bool              `json:"disabled"`
 	Dependencies map[string]string `json:"dependencies,omitempty"`
 	Actions      []string          `json:"actions"`
+}
+
+type RepositoryPlan struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
@@ -50,6 +57,7 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 		LifecycleSHA256:   lifecycleHash,
 		ManifestDirectory: ".",
 		WorkspaceRoot:     loaded.Manifest.Workspace.Root,
+		Repositories:      repositoryPlans(&loaded.Manifest),
 		Lifecycle:         lifecycle,
 		Artifacts: []string{
 			"manifest.yaml",
@@ -74,6 +82,7 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 	for _, service := range loaded.Manifest.Services {
 		item := ServicePlan{
 			Name:         service.Name,
+			Repository:   service.Repository,
 			Source:       service.Source,
 			Activation:   service.Activation,
 			Process:      service.Source != "external",
@@ -159,6 +168,11 @@ func (p Plan) WriteHuman(w io.Writer) {
 		p.TerminalMode,
 	)
 	p.Lifecycle.writeHuman(w)
+	_, _ = fmt.Fprintln(w, "Repositories:")
+	for _, repository := range p.Repositories {
+		_, _ = fmt.Fprintf(w, "  %-20s %s\n", repository.Name, repository.Path)
+	}
+	_, _ = fmt.Fprintln(w)
 	if p.Recovery != nil {
 		if p.Recovery.Generation == "" {
 			_, _ = fmt.Fprintln(w, "Recovery: start; no recorded lifecycle generation")
@@ -182,11 +196,19 @@ func (p Plan) WriteHuman(w io.Writer) {
 		} else if !service.Process {
 			stateText = "observed only"
 		}
-		_, _ = fmt.Fprintf(w, "  %-20s %-9s %-9s %s\n", service.Name, service.Source, service.Activation, stateText)
+		_, _ = fmt.Fprintf(w, "  %-20s %-12s %-9s %-9s %s\n", service.Name, service.Repository, service.Source, service.Activation, stateText)
 	}
 	_, _ = fmt.Fprintln(w, "\nArtifacts:")
 	for _, artifact := range p.Artifacts {
 		_, _ = fmt.Fprintf(w, "  %s\n", artifact)
 	}
 	_, _ = fmt.Fprintf(w, "\nRequired executables: %s\n", strings.Join(p.Executables, ", "))
+}
+
+func repositoryPlans(m *manifest.Manifest) []RepositoryPlan {
+	result := []RepositoryPlan{{Name: manifest.WorkspaceRepository, Path: "."}}
+	for _, name := range manifest.DeclaredRepositoryNames(m) {
+		result = append(result, RepositoryPlan{Name: name, Path: m.Repositories[name].Path})
+	}
+	return result
 }

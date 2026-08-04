@@ -15,6 +15,8 @@ import (
 type Candidate struct {
 	Name           string   `json:"name"`
 	Source         string   `json:"source"`
+	Repository     string   `json:"repository"`
+	RepositoryPath string   `json:"repository_path"`
 	Directory      string   `json:"directory"`
 	Argv           []string `json:"argv,omitempty"`
 	ComposeFile    string   `json:"compose_file,omitempty"`
@@ -22,6 +24,7 @@ type Candidate struct {
 	Profiles       []string `json:"profiles,omitempty"`
 	Confidence     string   `json:"confidence"`
 	Evidence       string   `json:"evidence"`
+	AutoSelect     bool     `json:"auto_select"`
 }
 
 type Draft struct {
@@ -68,7 +71,7 @@ func Interactive(options Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	candidates, discoveryHash, err := Discover(workspaceRoot, options.FromCompose)
+	candidates, discoveryHash, err := Discover(workspaceRoot, root, options.FromCompose)
 	if err != nil {
 		return Result{}, err
 	}
@@ -131,13 +134,13 @@ func NonInteractive(options Options, content []byte, name, terminal string) (Res
 		}
 		m := manifest.Manifest{APIVersion: manifest.APIVersion, Kind: manifest.Kind, Project: manifest.Project{Name: name, Slug: manifest.Slug(name), ID: projectID}, Workspace: manifest.Workspace{Root: options.WorkspaceRoot}, Terminal: manifest.Terminal{Mode: terminal}}
 		if options.FromCompose != "" {
-			candidates, _, err := Discover(workspaceRoot, options.FromCompose)
+			candidates, _, err := Discover(workspaceRoot, root, options.FromCompose)
 			if err != nil {
 				return Result{}, err
 			}
 			for _, candidate := range candidates {
 				if candidate.Source == "compose" {
-					m.Services = append(m.Services, candidateService(candidate))
+					addCandidate(&m, candidate)
 				}
 			}
 		}

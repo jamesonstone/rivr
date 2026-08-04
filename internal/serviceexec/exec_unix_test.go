@@ -14,19 +14,30 @@ import (
 
 func TestComposeShutdownUsesExactConfiguredArguments(t *testing.T) {
 	root := t.TempDir()
+	backend := filepath.Join(root, "backend")
+	if err := os.MkdirAll(backend, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	resolvedBackend, err := filepath.EvalSymlinks(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
 	logPath := filepath.Join(root, "arguments.log")
+	directoryLog := filepath.Join(root, "directory.log")
 	executable := filepath.Join(root, "fake-compose")
-	script := "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > \"$RUNGRID_ARG_LOG\"\n"
+	script := "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > \"$RUNGRID_ARG_LOG\"\nprintf '%s\\n' \"$PWD\" > \"$RUNGRID_DIR_LOG\"\n"
 	if err := os.WriteFile(executable, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
 	service := &manifest.Service{
 		Name:             "database",
+		Repository:       "backend",
 		Source:           "compose",
 		WorkingDirectory: ".",
 		Environment: manifest.Environment{Values: map[string]string{
 			"RUNGRID_ARG_LOG": logPath,
+			"RUNGRID_DIR_LOG": directoryLog,
 		}},
 		Compose: &manifest.Compose{
 			File:        "compose.yaml",
@@ -37,7 +48,8 @@ func TestComposeShutdownUsesExactConfiguredArguments(t *testing.T) {
 		},
 	}
 
-	if err := ComposeShutdown(service, root, context.Background()); err != nil {
+	m := &manifest.Manifest{Repositories: map[string]manifest.Repository{"backend": {Path: "backend"}}, Services: []manifest.Service{*service}}
+	if err := ComposeShutdown(m, service, root, context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(logPath)
@@ -55,5 +67,12 @@ func TestComposeShutdownUsesExactConfiguredArguments(t *testing.T) {
 	}, "\n")
 	if string(content) != want {
 		t.Fatalf("unexpected arguments:\n%s\nwant:\n%s", content, want)
+	}
+	directory, err := os.ReadFile(directoryLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(directory)) != resolvedBackend {
+		t.Fatalf("Compose ran in %q, want %q", strings.TrimSpace(string(directory)), resolvedBackend)
 	}
 }

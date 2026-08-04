@@ -41,7 +41,7 @@ func Start(ctx context.Context, active Active, serviceName string) (string, erro
 	if service.Source == "external" {
 		waitContext, cancel := context.WithTimeout(ctx, active.Manifest.Runtime.StartupTimeout.Duration)
 		defer cancel()
-		if err := serviceexec.WaitExternal(waitContext, active.Runtime.WorkspaceRoot, service); err != nil {
+		if err := serviceexec.WaitExternal(waitContext, active.Manifest, active.Runtime.WorkspaceRoot, service); err != nil {
 			return "", err
 		}
 		return "external service is ready; lifecycle remains external", nil

@@ -26,14 +26,14 @@ func ResolveEnvironment(
 	ctx context.Context,
 	configuration manifest.Environment,
 	workingDirectory string,
-	workspaceRoot string,
+	serviceRoot string,
 ) ([]string, map[string]string, error) {
 	values := parseEnvironment(os.Environ())
 	for _, provider := range configuration.Providers {
 		switch provider.Type {
 		case "dotenv":
 			filename := filepath.Join(workingDirectory, provider.Path)
-			if err := ensureProviderPath(workspaceRoot, filename, provider.Optional); err != nil {
+			if err := ensureProviderPath(serviceRoot, filename, provider.Optional); err != nil {
 				return nil, nil, err
 			}
 			content, err := os.ReadFile(filename)
@@ -59,7 +59,7 @@ func ResolveEnvironment(
 		case "direnv":
 			providerContext, cancel := context.WithTimeout(ctx, provider.Timeout.Duration)
 			directory := filepath.Join(workingDirectory, provider.Directory)
-			if err := ensureProviderPath(workspaceRoot, directory, false); err != nil {
+			if err := ensureProviderPath(serviceRoot, directory, false); err != nil {
 				cancel()
 				return nil, nil, err
 			}
@@ -80,7 +80,7 @@ func ResolveEnvironment(
 func ensureProviderPath(root, candidate string, optional bool) error {
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return errs.Wrap(errs.ExitConflict, "RG514", "resolve environment provider workspace root", err)
+		return errs.Wrap(errs.ExitConflict, "RG514", "resolve environment provider service root", err)
 	}
 	resolved, err := filepath.EvalSymlinks(candidate)
 	if err != nil && optional && os.IsNotExist(err) {
@@ -95,7 +95,7 @@ func ensureProviderPath(root, candidate string, optional bool) error {
 		return errs.Wrap(errs.ExitConflict, "RG512", "resolve environment provider path", err)
 	}
 	if !pathWithin(resolvedRoot, resolved) {
-		return errs.New(errs.ExitConflict, "RG513", "environment provider path resolves outside the workspace")
+		return errs.New(errs.ExitConflict, "RG513", "environment provider path resolves outside the service repository")
 	}
 	return nil
 }

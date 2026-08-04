@@ -160,7 +160,7 @@ func Run(ctx context.Context, options Options) (returnErr error) {
 		candidate, _ := manifest.FindService(options.Manifest, dependency)
 		if candidate != nil && candidate.Source == "external" {
 			dependencyContext, cancel := context.WithTimeout(ctx, options.Manifest.Runtime.StartupTimeout.Duration)
-			err := serviceexec.WaitExternal(dependencyContext, options.Runtime.WorkspaceRoot, candidate)
+			err := serviceexec.WaitExternal(dependencyContext, options.Manifest, options.Runtime.WorkspaceRoot, candidate)
 			cancel()
 			if err != nil {
 				return err

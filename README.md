@@ -80,6 +80,9 @@ project:
   id: example-workspace-k7m4q2
 workspace:
   root: ..
+repositories:
+  api:
+    path: api
 terminal:
   mode: warp
 lifecycle:
@@ -103,9 +106,10 @@ services:
       command:
         argv: [database-ready, --quiet]
   - name: api
+    repository: api
     source: native
     activation: tab
-    working_directory: api
+    working_directory: .
     run:
       argv: [go, run, ./cmd/server]
     terminal:
@@ -115,12 +119,15 @@ services:
 ```
 
 `workspace.root` is relative to the manifest directory and may include sibling
-repositories. One-shot lifecycle commands run in order around the supervised
-workspace and remain recoverable after a failed startup or cleanup. Workspace-
-owned services start during `up`; tab-owned services remain disabled in Process
-Compose until an exclusive `rungrid session` owns them. External services are
-readiness dependencies only and are never directly started or stopped by
-service commands.
+repositories. Optional logical `repositories` keep each service's working
+directory, Compose files, and environment providers inside its owning source
+root; services without `repository` retain the implicit `workspace` behavior.
+One-shot lifecycle commands run in order around the supervised workspace and
+remain recoverable after a failed startup or cleanup. Workspace-owned services
+start during `up`; tab-owned services remain disabled in Process Compose until
+an exclusive `rungrid session` owns them. External services are readiness
+dependencies only and are never directly started or stopped by service
+commands.
 
 The complete product and safety contract is [CLI_SPEC.md](CLI_SPEC.md). Durable
 implementation rationale lives in

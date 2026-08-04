@@ -34,7 +34,7 @@ func newModel(options Options, candidates []Candidate, discoveryHash, projectID 
 	input.Focus()
 	selected := make([]bool, len(candidates))
 	for i := range selected {
-		selected[i] = candidates[i].Confidence == "exact" || candidates[i].Confidence == "high"
+		selected[i] = candidates[i].AutoSelect
 	}
 	result := model{options: options, input: input, candidates: candidates, selected: selected, discoveryHash: discoveryHash, projectID: projectID, terminal: "warp", environment: "none", linkDependencies: true}
 	if options.DraftPath != "" {

@@ -3,6 +3,7 @@ package doctor
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -59,6 +60,47 @@ func TestRequiredExecutablesIncludesStructuredWrappersAndTabTrigger(t *testing.T
 		if !containsExecutable(actual, expected) {
 			t.Errorf("required executable %q missing from %#v", expected, actual)
 		}
+	}
+}
+
+func TestDoctorReportsDeclaredRepository(t *testing.T) {
+	workspace := t.TempDir()
+	control := filepath.Join(workspace, "control")
+	api := filepath.Join(workspace, "api")
+	if err := os.MkdirAll(control, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(api, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("git", "-C", api, "init", "-b", "main").CombinedOutput(); err != nil {
+		t.Fatalf("initialize repository: %v\n%s", err, output)
+	}
+	processCompose := filepath.Join(workspace, "process-compose")
+	if err := os.WriteFile(processCompose, []byte("#!/bin/sh\nprintf 'Version: v1.120.0\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", workspace+string(os.PathListSeparator)+os.Getenv("PATH"))
+	configuration := `api_version: rungrid/v1
+kind: Workspace
+project: {name: Example, slug: example, id: example-k7m4q2}
+workspace: {root: ..}
+repositories: {api: {path: api}}
+runtime: {process_compose: {executable: process-compose}}
+terminal: {mode: headless}
+services: []
+`
+	filename := filepath.Join(control, ".rungrid.yaml")
+	if err := os.WriteFile(filename, []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := manifest.Load(filename, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := Run(context.Background(), loaded, t.TempDir(), false)
+	if !report.OK || !hasCheck(report, "repository:api", "ok") || !hasCheck(report, "repository-git:api", "ok") {
+		t.Fatalf("doctor omitted repository checks: %#v", report)
 	}
 }
 

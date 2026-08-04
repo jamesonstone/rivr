@@ -63,7 +63,7 @@ func (m model) buildManifest() *manifest.Manifest {
 	result := &manifest.Manifest{APIVersion: manifest.APIVersion, Kind: manifest.Kind, Project: manifest.Project{Name: strings.TrimSpace(m.input.Value()), Slug: manifest.Slug(m.input.Value()), ID: m.projectID}, Workspace: manifest.Workspace{Root: m.options.WorkspaceRoot}, Terminal: manifest.Terminal{Mode: m.terminal}}
 	for i, candidate := range m.candidates {
 		if m.selected[i] {
-			result.Services = append(result.Services, candidateService(candidate))
+			addCandidate(result, candidate)
 		}
 	}
 	var composeServices []string

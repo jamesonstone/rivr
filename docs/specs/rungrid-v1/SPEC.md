@@ -110,6 +110,49 @@ planning, journal and executor, lifecycle command integration, recovery and
 uninstall behavior, then generic tests and delivery validation. The consumer
 lane follows only after the neutral lane is complete.
 
+## Declared repository roots
+
+Status: implemented and locally validated in `GH-14`.
+
+The common workspace root added by issue `#10` makes sibling repositories
+reachable, but service paths still address that entire boundary directly. A
+multi-repository manifest needs stable logical repository names so service
+configuration can remain local to the repository that owns its command,
+Compose file, environment providers, and source-control state.
+
+Accepted decisions:
+
+- `workspace.root` remains the outer import, lifecycle, and execution boundary.
+  Replacing it would break the crash-safe lifecycle contract and existing
+  manifests.
+- `repositories` is an optional map of logical names to paths relative to the
+  workspace root. The reserved implicit name `workspace` always identifies the
+  workspace root and preserves existing behavior.
+- A service's optional `repository` defaults to `workspace`.
+  `working_directory`, Compose files, and environment-provider paths resolve
+  inside the selected repository and may not escape it after symlink
+  resolution.
+- Declared repository roots must be relative, existing, distinct directories
+  within `workspace.root`. The ignored local overlay may replace a declared
+  relative path for a different checkout layout without changing service
+  configuration.
+- Plans and normalized manifests contain only logical names and relative
+  declarations. Runtime execution resolves the selected root against the
+  machine-local absolute workspace root.
+- Versions derives Git state from each service's selected repository context.
+  Doctor reports every valid declared root and source-control availability.
+- Onboarding detects the nearest Git root for discovered services. Selected
+  sibling repositories become declarations; unselected siblings do not enter
+  the manifest.
+- Imports and lifecycle commands retain their existing workspace-root
+  semantics. Repository declarations do not expand the outer boundary, alter
+  project identity, or give uninstall authority over source repositories.
+
+Implementation proceeds through contract and schema changes, repository-root
+resolution and validation, execution-path propagation, planning and operator
+surfaces, onboarding discovery, focused tests, then complete repository
+validation and memory curation.
+
 ## Delivery record
 
 Issue `#12` adds the coding-agent instruction surface to the existing `GH-10`
@@ -119,6 +162,10 @@ commit traceability without creating a second branch or review candidate.
 Issue `#13` adds the CLI help redesign to the same branch and pull request at
 the user's direction, with its own scoped commits and validation evidence. Kit
 is read-only design evidence; no cross-repository change is part of this lane.
+
+Issue `#14` adds named repository roots as a separate review candidate on
+`GH-14`. It refines the common workspace boundary delivered by issue `#10`
+without changing import or lifecycle ownership.
 
 The accepted plan proposed a separate issue, branch, and pull request for each
 stage. The repository implementation was completed as one dependency-ordered
@@ -227,6 +274,12 @@ a separate repository lane and is not part of this branch.
   no discovery or mutation itself, and emits the same content through both the
   human and versioned JSON surfaces. Consumer repository rules and explicit
   lifecycle authorization remain authoritative.
+- A common workspace boundary is insufficient to describe service ownership in
+  a multi-repository checkout. Stable logical repository names preserve
+  portable configuration while runtime path resolution remains machine-local.
+- Onboarding may discover runnable sibling Git repositories, but inferred
+  native sibling services require explicit selection before their repository
+  declarations enter the manifest.
 
 ## Validation record
 
@@ -236,6 +289,10 @@ Local validation completed on macOS with Process Compose 1.120.0:
   sanitization, native build, and Darwin/Linux amd64/arm64 builds.
 - `make lint`: zero `golangci-lint` findings.
 - `make vuln`: no reachable vulnerabilities reported by `govulncheck`.
+- Repository-root tests cover relative declarations, local overlay replacement,
+  duplicate roots, unknown references, lexical and symlink escapes, repository-
+  aware Compose shutdown and Git versions, Doctor checks, planning output, and
+  selected sibling discovery.
 - Focused command and prompt-builder tests prove that `instructions` and
   `agent-start` are equivalent, root help names the alias, JSON uses the
   versioned `AgentInstructions` envelope, and path hints remain encoded data.
@@ -251,6 +308,8 @@ Local validation completed on macOS with Process Compose 1.120.0:
 - `goreleaser check` and `make release-snapshot`: release configuration and all
   four target archives validated locally. Signing and SBOM creation are covered
   by CI/release configuration; the local snapshot skips an unavailable tool.
+- The real mixed-service and tab-only lifecycle suites pass with Process
+  Compose 1.120.0 after the repository-root change.
 - Fresh-install initialization, validation, planning, generation, and a real
   Process Compose dry run were exercised in temporary directories.
 - A Linux/arm64 container reproduction with Process Compose 1.120.0 exercised

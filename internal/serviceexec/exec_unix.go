@@ -69,11 +69,18 @@ func Exec(ctx context.Context, runtimeContext Context, serviceName string) error
 	if service.Source == "external" {
 		return errs.New(errs.ExitUsage, "RG705", "external services do not have supervised processes")
 	}
-	envList, envMap, err := environment.Resolve(ctx, service, runtimeContext.WorkspaceRoot)
+	repositoryRoot, err := manifest.ServiceRepositoryRoot(runtimeContext.Manifest, runtimeContext.WorkspaceRoot, service)
 	if err != nil {
 		return err
 	}
-	workingDirectory := filepath.Join(runtimeContext.WorkspaceRoot, service.WorkingDirectory)
+	workingDirectory, err := manifest.ServiceWorkingDirectory(runtimeContext.Manifest, runtimeContext.WorkspaceRoot, service)
+	if err != nil {
+		return err
+	}
+	envList, envMap, err := environment.Resolve(ctx, service, repositoryRoot)
+	if err != nil {
+		return err
+	}
 	argv := serviceArgv(service)
 	if len(argv) == 0 {
 		return errs.New(errs.ExitUsage, "RG706", "service has no executable argument vector")
@@ -91,37 +98,52 @@ func CheckHealth(ctx context.Context, runtimeContext Context, serviceName string
 		return errs.New(errs.ExitUsage, "RG708", "service is not present in the generated manifest")
 	}
 	if service.Source == "external" {
-		return CheckExternal(ctx, runtimeContext.WorkspaceRoot, service)
+		return CheckExternal(ctx, runtimeContext.Manifest, runtimeContext.WorkspaceRoot, service)
 	}
 	if service.Health == nil {
 		return nil
 	}
-	envList, envMap, err := environment.Resolve(ctx, service, runtimeContext.WorkspaceRoot)
+	repositoryRoot, err := manifest.ServiceRepositoryRoot(runtimeContext.Manifest, runtimeContext.WorkspaceRoot, service)
+	if err != nil {
+		return err
+	}
+	workingDirectory, err := manifest.ServiceWorkingDirectory(runtimeContext.Manifest, runtimeContext.WorkspaceRoot, service)
+	if err != nil {
+		return err
+	}
+	envList, envMap, err := environment.Resolve(ctx, service, repositoryRoot)
 	if err != nil {
 		return err
 	}
 	if service.Health.Command != nil {
-		return runHealthCommand(ctx, service.Health.Command.Argv, filepath.Join(runtimeContext.WorkspaceRoot, service.WorkingDirectory), envList, envMap)
+		return runHealthCommand(ctx, service.Health.Command.Argv, workingDirectory, envList, envMap)
 	}
 	return requestHealth(ctx, service.Health.URL, service.Health.Timeout.Duration)
 }
 
-func CheckExternal(ctx context.Context, root string, service *manifest.Service) error {
+func CheckExternal(ctx context.Context, m *manifest.Manifest, root string, service *manifest.Service) error {
 	if service.External == nil {
 		return errs.New(errs.ExitUsage, "RG709", "external service configuration is missing")
 	}
-	envList, envMap, err := environment.Resolve(ctx, service, root)
+	repositoryRoot, err := manifest.ServiceRepositoryRoot(m, root, service)
 	if err != nil {
 		return err
 	}
-	workingDirectory := filepath.Join(root, service.WorkingDirectory)
+	workingDirectory, err := manifest.ServiceWorkingDirectory(m, root, service)
+	if err != nil {
+		return err
+	}
+	envList, envMap, err := environment.Resolve(ctx, service, repositoryRoot)
+	if err != nil {
+		return err
+	}
 	if service.External.Command != nil {
 		return runHealthCommand(ctx, service.External.Command.Argv, workingDirectory, envList, envMap)
 	}
 	return requestHealth(ctx, service.External.URL, 3*time.Second)
 }
 
-func WaitExternal(ctx context.Context, root string, service *manifest.Service) error {
+func WaitExternal(ctx context.Context, m *manifest.Manifest, root string, service *manifest.Service) error {
 	interval := 500 * time.Millisecond
 	if service.Health != nil && service.Health.Interval.Duration > 0 {
 		interval = service.Health.Interval.Duration
@@ -129,7 +151,7 @@ func WaitExternal(ctx context.Context, root string, service *manifest.Service) e
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
-		if err := CheckExternal(ctx, root, service); err == nil {
+		if err := CheckExternal(ctx, m, root, service); err == nil {
 			return nil
 		}
 		select {
@@ -140,17 +162,24 @@ func WaitExternal(ctx context.Context, root string, service *manifest.Service) e
 	}
 }
 
-func ComposeShutdown(service *manifest.Service, root string, ctx context.Context) error {
+func ComposeShutdown(m *manifest.Manifest, service *manifest.Service, root string, ctx context.Context) error {
 	if service.Compose == nil {
 		return nil
 	}
-	_, envMap, err := environment.Resolve(ctx, service, root)
+	repositoryRoot, err := manifest.ServiceRepositoryRoot(m, root, service)
+	if err != nil {
+		return err
+	}
+	workingDirectory, err := manifest.ServiceWorkingDirectory(m, root, service)
+	if err != nil {
+		return err
+	}
+	_, envMap, err := environment.Resolve(ctx, service, repositoryRoot)
 	if err != nil {
 		return err
 	}
 	argv := composeBase(service.Compose.DownArgv, service.Compose)
 	argv = append(argv, "stop", service.Compose.Service)
-	workingDirectory := filepath.Join(root, service.WorkingDirectory)
 	executable, err := environment.LookPath(argv[0], workingDirectory, envMap)
 	if err != nil {
 		return errs.Wrap(errs.ExitDependency, "RG711", "resolve Compose shutdown executable", err)
