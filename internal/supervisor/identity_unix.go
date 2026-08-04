@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 func waitForSocket(ctx context.Context, socket string) error {
@@ -31,13 +32,13 @@ func waitForSocket(ctx context.Context, socket string) error {
 }
 
 func socketPID(ctx context.Context, socket, configuration string) (int, error) {
-	output, err := exec.CommandContext(ctx, "lsof", "-nP", "-U", "-F", "pcn").Output()
+	result, err := subprocess.Run(exec.CommandContext(ctx, "lsof", "-nP", "-U", "-F", "pcn"))
 	if err != nil {
 		return 0, errs.Wrap(errs.ExitDependency, "RG626", "identify Process Compose socket owner with lsof", err)
 	}
 	pid := 0
 	commandName := ""
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(string(result.Stdout), "\n") {
 		if len(line) < 2 {
 			continue
 		}
@@ -78,16 +79,16 @@ func inspectProcess(ctx context.Context, pid int) (string, string, error) {
 	if pid <= 1 || !processExists(pid) {
 		return "", "", errs.New(errs.ExitConflict, "RG628", "runtime process does not exist")
 	}
-	identityOutput, err := exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	identityResult, err := subprocess.Run(exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid)))
 	if err != nil {
 		return "", "", errs.Wrap(errs.ExitConflict, "RG629", "inspect runtime process start identity", err)
 	}
-	commandOutput, err := exec.CommandContext(ctx, "ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
+	commandResult, err := subprocess.Run(exec.CommandContext(ctx, "ps", "-o", "command=", "-p", strconv.Itoa(pid)))
 	if err != nil {
 		return "", "", errs.Wrap(errs.ExitConflict, "RG630", "inspect runtime process command", err)
 	}
-	identity := strings.TrimSpace(string(identityOutput))
-	command := strings.TrimSpace(string(commandOutput))
+	identity := strings.TrimSpace(string(identityResult.Stdout))
+	command := strings.TrimSpace(string(commandResult.Stdout))
 	if identity == "" || command == "" || !strings.Contains(strings.ToLower(command), "process-compose") {
 		return "", "", errs.New(errs.ExitConflict, "RG631", "runtime PID is not Process Compose")
 	}

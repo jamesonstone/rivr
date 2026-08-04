@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 type Client struct {
@@ -39,15 +39,11 @@ func (c Client) command(ctx context.Context, arguments ...string) *exec.Cmd {
 
 func (c Client) Run(ctx context.Context, arguments ...string) ([]byte, error) {
 	command := c.command(ctx, arguments...)
-	output, err := command.Output()
+	result, err := subprocess.Run(command)
 	if err != nil {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			return nil, errs.Wrap(errs.ExitFailure, "RG303", fmt.Sprintf("Process Compose %s failed", strings.Join(arguments, " ")), redactedCommandError(err, append(output, exitError.Stderr...)))
-		}
-		return nil, errs.Wrap(errs.ExitFailure, "RG303", fmt.Sprintf("Process Compose %s failed", strings.Join(arguments, " ")), redactedCommandError(err, output))
+		return nil, errs.Wrap(errs.ExitFailure, "RG303", fmt.Sprintf("Process Compose %s failed", strings.Join(arguments, " ")), redactedCommandError(err, append(result.Stdout, result.Stderr...)))
 	}
-	return output, nil
+	return result.Stdout, nil
 }
 
 func (c Client) Ping(ctx context.Context) error {

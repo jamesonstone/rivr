@@ -11,6 +11,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/manifest"
 	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/supervisor"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 func TestListeningPortsParsesAndSortsLsofOutput(t *testing.T) {
@@ -98,7 +99,7 @@ func TestCaptureUsesEachServiceRepository(t *testing.T) {
 func runGitTest(t *testing.T, directory string, arguments ...string) {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
-	if output, err := command.CombinedOutput(); err != nil {
+	if output, err := subprocess.Combined(command); err != nil {
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
 }

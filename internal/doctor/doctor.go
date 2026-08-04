@@ -13,6 +13,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/manifest"
 	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/state"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 	"github.com/jamesonstone/rungrid/internal/workspace"
 )
 
@@ -208,7 +209,7 @@ func requiredExecutables(m *manifest.Manifest) []string {
 func processComposeVersion(ctx context.Context, executable string) (string, error) {
 	versionContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(versionContext, executable, "version").CombinedOutput()
+	output, err := subprocess.Combined(exec.CommandContext(versionContext, executable, "version"))
 	if err != nil {
 		return "", fmt.Errorf("%w", err)
 	}
