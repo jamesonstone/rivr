@@ -54,6 +54,10 @@ in Overview while preserving direct per-tab control.
   alias emit one self-contained brief that teaches an agent to inspect the
   selected consumer projects and author the portable manifest under each
   repository's own rules.
+- Help is a first-class operator surface. It borrows Kit's presentation
+  grammar—ASCII identity, workflow grouping, terminal-aware color, and stable
+  plain output—while using Rungrid's own lifecycle and ownership model. Color
+  is never semantic and explicit color suppression remains authoritative.
 - Default-branch history rewriting is excluded from implementation lanes. The
   neutral contract is delivered normally; historical objects and archived pull
   request references may retain earlier content.
@@ -111,6 +115,10 @@ lane follows only after the neutral lane is complete.
 Issue `#12` adds the coding-agent instruction surface to the existing `GH-10`
 branch and pull request at the user's direction. It retains separate issue and
 commit traceability without creating a second branch or review candidate.
+
+Issue `#13` adds the CLI help redesign to the same branch and pull request at
+the user's direction, with its own scoped commits and validation evidence. Kit
+is read-only design evidence; no cross-repository change is part of this lane.
 
 The accepted plan proposed a separate issue, branch, and pull request for each
 stage. The repository implementation was completed as one dependency-ordered
@@ -231,6 +239,12 @@ Local validation completed on macOS with Process Compose 1.120.0:
 - Focused command and prompt-builder tests prove that `instructions` and
   `agent-start` are equivalent, root help names the alias, JSON uses the
   versioned `AgentInstructions` envelope, and path hints remain encoded data.
+- Help presentation tests pin the complete plain root output, require every
+  visible command to appear in exactly one workflow group, exercise root and
+  subcommand help through both invocation forms, prove terminal ANSI styling,
+  and prove `--no-color` and `NO_COLOR` suppression. Kit's help implementation
+  and live terminal output were inspected as design evidence without modifying
+  that repository.
 - `tests/end-to-end/local/run.sh`: real detached Process Compose lifecycle,
   runtime identity tamper rejection, active-generation protection, exclusive
   tab sessions, stop/restart, cleanup, and immutable ignored evidence.
@@ -277,8 +291,10 @@ portable multi-repository workspace boundary, crash-safe one-shot lifecycle,
 Process Compose runtime, Warp/headless presentation, onboarding, tests, CI, and
 release packaging. A read-only agent instruction surface can now hand the
 portable integration contract and selected path hints to a coding agent before
-the manifest exists. The neutral implementation is ready for a separately
-owned consumer cutover lane; this outcome does not claim consumer parity.
+the manifest exists. Root and subcommand help now expose the same contract in a
+Rungrid-specific, workflow-grouped terminal presentation with a stable plain
+fallback. The neutral implementation is ready for a separately owned consumer
+cutover lane; this outcome does not claim consumer parity.
 
 Default-branch history was not rewritten:
 repository guardrails prohibit force pushing or mutating the default branch,

@@ -62,6 +62,9 @@ func TestCLISpecDefinesV1Contract(t *testing.T) {
 		"Starting or stopping one service never runs global lifecycle hooks",
 		"rungrid instructions [project-path ...]",
 		"rungrid agent-start [project-path ...]",
+		"root help presents a Rungrid ASCII banner",
+		"`--no-color`",
+		"`NO_COLOR`",
 		"## 15. Legacy-workspace migration contract",
 	} {
 		if !strings.Contains(text, required) {

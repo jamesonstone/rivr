@@ -40,6 +40,10 @@
 - Coding-agent instructions are read-only guidance. They must not inspect or
   execute supplied project paths, replace the manifest as configuration
   authority, or override a consumer repository's rules and user authorization.
+- Human help output may add color and terminal-only decoration only when the
+  output is interactive and color is not disabled. Color must never carry
+  meaning; redirected and explicitly colorless help remains complete and
+  stable.
 
 ### Kit-Managed Baseline Rules
 

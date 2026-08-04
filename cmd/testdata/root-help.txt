@@ -1,0 +1,83 @@
+           ██████╗ ██╗   ██╗███╗   ██╗ ██████╗ ██████╗ ██╗██████╗
+           ██╔══██╗██║   ██║████╗  ██║██╔════╝ ██╔══██╗██║██╔══██╗
+           ██████╔╝██║   ██║██╔██╗ ██║██║  ███╗██████╔╝██║██║  ██║
+           ██╔══██╗██║   ██║██║╚██╗██║██║   ██║██╔══██╗██║██║  ██║
+           ██║  ██║╚██████╔╝██║ ╚████║╚██████╔╝██║  ██║██║██████╔╝
+           ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝
+
+                       one workspace. truthful lifecycle.
+
+Rungrid compiles a portable .rungrid.yaml into one observable local
+development workspace. Process Compose owns managed-service lifecycle while
+Warp or a headless shell provides the operator surface.
+
+🔁 Workspace Lifecycle (single managed-service authority):
+  .rungrid.yaml → portable workspace authority
+    │
+    ▼
+  plan / generate → deterministic preview and derived state
+    │
+    ▼
+  rungrid up
+    ├─ lifecycle.before_up → ordered prerequisites
+    └─ Process Compose → lifecycle and logs
+         ├─ Overview → read-only TUI and selectable logs
+         ├─ Versions → process, ports, and Git state
+         └─ Service tabs → exclusive tab-owned sessions
+    │
+    ▼
+  rungrid down → lifecycle.after_down → ordered teardown
+
+🧩 Service Ownership
+  workspace  starts with rungrid up
+  tab        belongs to one foreground session
+  external   is observed and never managed
+
+Usage
+  rungrid [command]
+
+Available Commands
+
+Configure
+  init           Create a portable workspace manifest
+  instructions   Print coding-agent workspace wiring instructions (alias: agent-start)
+  doctor         Validate configuration and local dependencies
+  config         Inspect and validate manifest configuration
+
+Build & Launch
+  plan           Show deterministic generation and lifecycle actions
+  generate       Generate owned project runtime artifacts
+  up             Generate and start the detached workspace
+  open           Open the Warp workspace or one service tab
+
+Observe
+  attach         Attach to the active Process Compose TUI
+  versions       Show process, listener, and source-control state
+  status         Report active runtime and service state
+  logs           Read Process Compose service logs
+
+Control
+  session        Own a tab service until stop or signal
+  start          Start a service using activation-aware behavior
+  stop           Stop an exact managed service
+  down           Perform ordered workspace shutdown
+
+Cleanup & Utilities
+  uninstall      Remove only owned project state and Warp files
+  completion     Generate shell completion
+  version        Show build and API compatibility
+  help           Help about any command
+
+
+Flags
+      --config string      manifest path (default ".rungrid.yaml")
+  -h, --help               help for rungrid
+      --json               emit rungrid/output/v1 JSON
+      --local string       local overlay path
+      --no-color           disable ANSI color
+      --project string     select a known project id
+  -q, --quiet              suppress non-error output
+      --state-dir string   state root override
+  -v, --verbose            include redacted diagnostics
+
+Use "rungrid [command] --help" for more information about a command.

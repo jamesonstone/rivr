@@ -133,6 +133,11 @@ Rungrid v1 provides `init`, `doctor`, `plan`, `generate`, `up`, `open`,
 `uninstall`, `config`, `instructions` (alias `agent-start`), `completion`, and
 `version`. Every JSON-capable command uses a `rungrid/output/v1` envelope.
 
+`rungrid --help` and `rungrid help` present the workspace lifecycle, service
+ownership model, and commands grouped by workflow. Interactive terminals use
+the Rungrid color palette; redirected output is stable plain text. Use
+`--no-color` or set `NO_COLOR` to suppress ANSI styling explicitly.
+
 Generated files, runtime identity, locks, logs, and terminal ownership live in
 project-scoped XDG state. Rungrid verifies ownership hashes, PID start identity,
 and Unix-socket identity before lifecycle mutation. `uninstall` removes only

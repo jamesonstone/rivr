@@ -778,6 +778,21 @@ Global flags:
 --verbose             add redacted diagnostics
 ```
 
+Help output is a human interface with a stable plain-text fallback:
+
+- root help presents a Rungrid ASCII banner, the manifest-to-runtime lifecycle
+  model, service-ownership semantics, workflow-grouped commands, global flags,
+  and the standard command-help hint;
+- subcommand help uses consistent Usage, Aliases, Examples, Available Commands,
+  Flags, and Global Flags sections when each section applies;
+- interactive terminal output uses intentional ANSI styling and concise emoji
+  section labels inspired by the repository's developer-tool conventions;
+- redirected output, non-terminal writers, `--no-color`, and a non-empty
+  `NO_COLOR` environment variable emit equivalent content without ANSI escapes
+  or terminal-only heading decoration;
+- color changes presentation only and never changes command names, ordering,
+  aliases, flag parsing, completion, exit status, or machine-readable output.
+
 ### 11.1 init
 
 ```text

@@ -78,6 +78,7 @@ func newRootCommand() *cobra.Command {
 		newVersionCommand(opt),
 		newInternalCommand(opt),
 	)
+	configureHelp(root, opt)
 	return root
 }
 
