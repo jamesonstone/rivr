@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 func TestListeningPortsParsesAndSortsLsofOutput(t *testing.T) {
@@ -50,7 +52,7 @@ func TestGitVersionReportsBranchCommitCleanDirtyAndWorktree(t *testing.T) {
 func runGitTest(t *testing.T, directory string, arguments ...string) {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
-	if output, err := command.CombinedOutput(); err != nil {
+	if output, err := subprocess.Combined(command); err != nil {
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
 }

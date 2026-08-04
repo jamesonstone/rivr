@@ -52,6 +52,13 @@
 
 - `tmp/` is ignored. The headless runner atomically reserves a positive run
   number and writes redacted `output.txt` plus `result.json`.
+- `output.txt` is the sole full-output artifact. Evidence runners never replay
+  it unboundedly to stdout or stderr; terminal output contains only bounded
+  status metadata and the exact evidence path.
+- Evidence output has a 64 MiB hard maximum with no unlimited mode. The limit
+  is enforced before bytes reach disk. Overflow terminates and waits for the
+  child process group, preserves the bounded artifact, records output-limit
+  metadata in `result.json`, and fails with exit code 74.
 - `tests/RUN_STATUS.md` is curated at handoff milestones and is never updated
   automatically by tests or CI.
 - The CI end-to-end job installs the pinned Process Compose 1.120.0 Linux

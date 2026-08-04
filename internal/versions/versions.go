@@ -14,6 +14,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/manifest"
 	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/serviceexec"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 	"github.com/jamesonstone/rungrid/internal/supervisor"
 )
 
@@ -109,12 +110,12 @@ func WriteHuman(w io.Writer, snapshot Snapshot) {
 }
 
 func listeningPorts(ctx context.Context, pid int) []int {
-	output, err := exec.CommandContext(ctx, "lsof", "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:LISTEN", "-F", "n").Output()
+	capture, err := subprocess.Run(exec.CommandContext(ctx, "lsof", "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:LISTEN", "-F", "n"))
 	if err != nil {
 		return nil
 	}
 	seen := map[int]bool{}
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(string(capture.Stdout), "\n") {
 		if !strings.HasPrefix(line, "n") {
 			continue
 		}
@@ -146,10 +147,10 @@ func gitVersion(ctx context.Context, directory string) (branch, commit, gitState
 		return "", "", "unavailable", ""
 	}
 	statusCommand := exec.CommandContext(ctx, "git", "-C", directory, "status", "--porcelain", "--untracked-files=normal")
-	statusOutput, err := statusCommand.Output()
+	statusResult, err := subprocess.Run(statusCommand)
 	if err != nil {
 		gitState = "unavailable"
-	} else if len(statusOutput) == 0 {
+	} else if len(statusResult.Stdout) == 0 {
 		gitState = "clean"
 	} else {
 		gitState = "dirty"
@@ -163,9 +164,9 @@ func gitVersion(ctx context.Context, directory string) (branch, commit, gitState
 
 func runGit(ctx context.Context, directory string, arguments ...string) string {
 	command := exec.CommandContext(ctx, "git", append([]string{"-C", directory}, arguments...)...)
-	output, err := command.Output()
+	result, err := subprocess.Run(command)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return strings.TrimSpace(string(result.Stdout))
 }

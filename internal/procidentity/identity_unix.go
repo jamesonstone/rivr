@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 func Current() (string, error) { return Inspect(os.Getpid()) }
@@ -21,11 +23,11 @@ func Inspect(pid int) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	result, err := subprocess.Run(exec.CommandContext(ctx, "ps", "-o", "lstart=", "-p", strconv.Itoa(pid)))
 	if err != nil {
 		return "", err
 	}
-	identity := strings.TrimSpace(string(output))
+	identity := strings.TrimSpace(string(result.Stdout))
 	if identity == "" {
 		return "", fmt.Errorf("empty process start identity")
 	}

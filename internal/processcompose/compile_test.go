@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jamesonstone/rungrid/internal/subprocess"
+
 	"github.com/jamesonstone/rungrid/internal/manifest"
 )
 
@@ -46,7 +48,7 @@ func TestCompileMatchesGoldenAndProcessComposeSchema(t *testing.T) {
 	}
 	command := exec.Command(processCompose, "-f", filename, "--dry-run")
 	command.Dir = directory
-	if output, err := command.CombinedOutput(); err != nil {
+	if output, err := subprocess.Combined(command); err != nil {
 		t.Fatalf("minimum-version schema rejected generated config: %v\n%s", err, output)
 	}
 }
