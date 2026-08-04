@@ -271,6 +271,10 @@ Local validation completed on macOS with Process Compose 1.120.0:
   mixed-service and tab-only headless run. Ignored evidence is recorded as run
   `20260804T120123Z-084621` at commit `534cc8c`; the release snapshot also built
   all four archives from that exact commit.
+- The help redesign was followed by a clean-source mixed-service and tab-only
+  headless run. Ignored evidence is recorded as run
+  `20260804T121733Z-014138` at commit `a4ffcef`; the release snapshot built all
+  four archives from the same commit.
 - `make build` was exercised under a temporary writable prefix and produced an
   exact `bin/rungrid` symlink. The existing `/usr/local/bin/rungrid` link uses
   the same canonical-repository layout as `kit`, `yp`, and `kp`; no
