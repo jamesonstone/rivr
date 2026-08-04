@@ -10,8 +10,8 @@ import (
 
 	"github.com/jamesonstone/rungrid/internal/manifest"
 	"github.com/jamesonstone/rungrid/internal/processcompose"
-	"github.com/jamesonstone/rungrid/internal/supervisor"
 	"github.com/jamesonstone/rungrid/internal/subprocess"
+	"github.com/jamesonstone/rungrid/internal/supervisor"
 )
 
 func TestListeningPortsParsesAndSortsLsofOutput(t *testing.T) {
