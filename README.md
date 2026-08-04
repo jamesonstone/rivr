@@ -41,6 +41,21 @@ rungrid doctor
 rungrid up
 ```
 
+To hand workspace wiring to a coding agent, generate a self-contained brief
+before or after initialization:
+
+```sh
+rungrid instructions . ../api ../web
+# Exact alias:
+rungrid agent-start . ../api ../web
+```
+
+The brief tells the agent how to inspect each repository, preserve its rules,
+choose a portable common workspace root, model shared infrastructure and
+tab-owned applications, validate the result, and keep `.rungrid.yaml` as the
+single service inventory. Supplied paths are printed as data and are never
+executed. The command does not require a manifest or mutate workspace state.
+
 Headless operation uses the same lifecycle:
 
 ```sh
@@ -115,8 +130,8 @@ implementation rationale lives in
 
 Rungrid v1 provides `init`, `doctor`, `plan`, `generate`, `up`, `open`,
 `attach`, `versions`, `status`, `logs`, `session`, `start`, `stop`, `down`,
-`uninstall`, `config`, `completion`, and `version`. Every JSON-capable command
-uses a `rungrid/output/v1` envelope.
+`uninstall`, `config`, `instructions` (alias `agent-start`), `completion`, and
+`version`. Every JSON-capable command uses a `rungrid/output/v1` envelope.
 
 Generated files, runtime identity, locks, logs, and terminal ownership live in
 project-scoped XDG state. Rungrid verifies ownership hashes, PID start identity,

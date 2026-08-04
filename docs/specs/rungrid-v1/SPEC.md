@@ -49,6 +49,11 @@ in Overview while preserving direct per-tab control.
   dashboard or a separate all-logs tab in v1.
 - Additional graphical terminal adapters and command-free multi-pane workspaces
   are deliberately outside v1.
+- Coding-agent onboarding is a read-only instruction surface, not a second
+  configuration or discovery engine. `instructions` and its `agent-start`
+  alias emit one self-contained brief that teaches an agent to inspect the
+  selected consumer projects and author the portable manifest under each
+  repository's own rules.
 - Default-branch history rewriting is excluded from implementation lanes. The
   neutral contract is delivered normally; historical objects and archived pull
   request references may retain earlier content.
@@ -102,6 +107,10 @@ uninstall behavior, then generic tests and delivery validation. The consumer
 lane follows only after the neutral lane is complete.
 
 ## Delivery record
+
+Issue `#12` adds the coding-agent instruction surface to the existing `GH-10`
+branch and pull request at the user's direction. It retains separate issue and
+commit traceability without creating a second branch or review candidate.
 
 The accepted plan proposed a separate issue, branch, and pull request for each
 stage. The repository implementation was completed as one dependency-ordered
@@ -205,6 +214,11 @@ a separate repository lane and is not part of this branch.
 - The local command symlink recipe must fail closed when privilege elevation or
   link replacement fails. It verifies the final link target before reporting
   success, matching the existing local `kit`, `yp`, and `kp` command layout.
+- An agent handoff must work before a manifest exists. The command therefore
+  treats the selected manifest and project paths as inert prompt data, performs
+  no discovery or mutation itself, and emits the same content through both the
+  human and versioned JSON surfaces. Consumer repository rules and explicit
+  lifecycle authorization remain authoritative.
 
 ## Validation record
 
@@ -214,6 +228,9 @@ Local validation completed on macOS with Process Compose 1.120.0:
   sanitization, native build, and Darwin/Linux amd64/arm64 builds.
 - `make lint`: zero `golangci-lint` findings.
 - `make vuln`: no reachable vulnerabilities reported by `govulncheck`.
+- Focused command and prompt-builder tests prove that `instructions` and
+  `agent-start` are equivalent, root help names the alias, JSON uses the
+  versioned `AgentInstructions` envelope, and path hints remain encoded data.
 - `tests/end-to-end/local/run.sh`: real detached Process Compose lifecycle,
   runtime identity tamper rejection, active-generation protection, exclusive
   tab sessions, stop/restart, cleanup, and immutable ignored evidence.
@@ -254,8 +271,10 @@ environment were unavailable where applicable.
 Rungrid v1 is implemented as a review candidate with the neutral contract,
 portable multi-repository workspace boundary, crash-safe one-shot lifecycle,
 Process Compose runtime, Warp/headless presentation, onboarding, tests, CI, and
-release packaging. The neutral implementation is ready for a separately owned
-consumer cutover lane; this outcome does not claim consumer parity.
+release packaging. A read-only agent instruction surface can now hand the
+portable integration contract and selected path hints to a coding agent before
+the manifest exists. The neutral implementation is ready for a separately
+owned consumer cutover lane; this outcome does not claim consumer parity.
 
 Default-branch history was not rewritten:
 repository guardrails prohibit force pushing or mutating the default branch,

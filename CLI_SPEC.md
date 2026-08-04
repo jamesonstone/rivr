@@ -38,6 +38,7 @@ Warp is the only graphical terminal adapter in v1.
 - ordered Warp Tab Config generation and opening;
 - exclusive service-tab sessions with signal-safe cleanup;
 - interactive and non-interactive onboarding;
+- self-contained coding-agent workspace-wiring instructions;
 - deterministic plans and machine-readable output;
 - project-scoped generation, runtime state, logs, and uninstall;
 - shell completion and release metadata derived from the source repository.
@@ -970,6 +971,35 @@ Reports semantic version, commit, build time, dirty marker when known, target,
 and supported manifest/output APIs. Release and repository metadata come from
 the build, not a hard-coded owner namespace.
 
+### 11.18 instructions
+
+```text
+rungrid instructions [project-path ...]
+rungrid agent-start [project-path ...]
+```
+
+`agent-start` is an exact alias of `instructions`. Both names are visible in
+command help so a coding agent can discover the workflow without prior Rungrid
+knowledge.
+
+The command prints a self-contained Markdown brief for wiring the named
+projects into one portable Rungrid workspace. The brief includes:
+
+- the selected manifest path and ordered project-path hints as inert data;
+- repository-rule and existing-work discovery requirements;
+- the workspace-root, lifecycle, activation, dependency, environment, and
+  terminal ownership contracts needed to build `.rungrid.yaml`;
+- single-inventory and project-specific information boundaries;
+- read-only validation followed by authorized lifecycle validation; and
+- implementation, documentation, and pull-request handoff expectations.
+
+When no project path is supplied, the command uses `.` as the discovery hint.
+It does not require an existing manifest, inspect or execute the supplied
+paths, access the network, generate state, or start services. Path values are
+never interpreted as shell input or agent instructions. With `--json`, the
+same brief and structured inputs are emitted in an `AgentInstructions`
+`rungrid/output/v1` envelope.
+
 ## 12. Machine-readable output
 
 JSON-capable commands emit one envelope:
@@ -1051,6 +1081,11 @@ manifest as the sole service inventory:
 8. isolate rollback state, socket, and ownership markers from Rungrid; and
 9. remove legacy active-path documentation only after graphical and headless
    parity is proven.
+
+`rungrid instructions <project-path>...` produces the neutral coding-agent
+brief for this migration. The generated brief is guidance, not authority: the
+agent must still follow each consumer repository's rules and preserve the
+user's selected scope.
 
 The migration must not maintain a second active service inventory. Project-only
 details belong in that project's manifest, not in Rungrid source, tests,

@@ -60,6 +60,8 @@ func TestCLISpecDefinesV1Contract(t *testing.T) {
 		"lifecycle.before_up",
 		"cleanup-required",
 		"Starting or stopping one service never runs global lifecycle hooks",
+		"rungrid instructions [project-path ...]",
+		"rungrid agent-start [project-path ...]",
 		"## 15. Legacy-workspace migration contract",
 	} {
 		if !strings.Contains(text, required) {
