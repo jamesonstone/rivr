@@ -31,20 +31,22 @@ type Draft struct {
 	Name             string `json:"name"`
 	Terminal         string `json:"terminal"`
 	Environment      string `json:"environment"`
+	WorkspaceRoot    string `json:"workspace_root"`
 	LinkDependencies bool   `json:"link_dependencies"`
 	Selected         []bool `json:"selected"`
 	Screen           int    `json:"screen"`
 }
 
 type Options struct {
-	Root        string
-	Destination string
-	DraftPath   string
-	Force       bool
-	FromCompose string
-	Input       io.Reader
-	Output      io.Writer
-	ErrorOutput io.Writer
+	Root          string
+	WorkspaceRoot string
+	Destination   string
+	DraftPath     string
+	Force         bool
+	FromCompose   string
+	Input         io.Reader
+	Output        io.Writer
+	ErrorOutput   io.Writer
 }
 
 type Result struct {
@@ -58,7 +60,15 @@ func Interactive(options Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	candidates, discoveryHash, err := Discover(root, options.FromCompose)
+	options.Root = root
+	if options.WorkspaceRoot == "" {
+		options.WorkspaceRoot = "."
+	}
+	workspaceRoot, err := manifest.ResolveWorkspaceRoot(root, options.WorkspaceRoot)
+	if err != nil {
+		return Result{}, err
+	}
+	candidates, discoveryHash, err := Discover(workspaceRoot, options.FromCompose)
 	if err != nil {
 		return Result{}, err
 	}
@@ -84,7 +94,7 @@ func Interactive(options Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	decoded, normalized, err := manifest.Decode(content, root)
+	decoded, normalized, err := manifest.Decode(content, workspaceRoot)
 	if err != nil {
 		return Result{}, err
 	}
@@ -99,7 +109,16 @@ func NonInteractive(options Options, content []byte, name, terminal string) (Res
 	if err != nil {
 		return Result{}, err
 	}
+	options.Root = root
+	if options.WorkspaceRoot == "" {
+		options.WorkspaceRoot = "."
+	}
+	var workspaceRoot string
 	if len(bytes.TrimSpace(content)) == 0 {
+		workspaceRoot, err = manifest.ResolveWorkspaceRoot(root, options.WorkspaceRoot)
+		if err != nil {
+			return Result{}, err
+		}
 		if strings.TrimSpace(name) == "" {
 			return Result{}, errs.New(errs.ExitUsage, "RG1304", "non-interactive init requires --input or --name")
 		}
@@ -110,9 +129,9 @@ func NonInteractive(options Options, content []byte, name, terminal string) (Res
 		if err != nil {
 			return Result{}, err
 		}
-		m := manifest.Manifest{APIVersion: manifest.APIVersion, Kind: manifest.Kind, Project: manifest.Project{Name: name, Slug: manifest.Slug(name), ID: projectID}, Terminal: manifest.Terminal{Mode: terminal}}
+		m := manifest.Manifest{APIVersion: manifest.APIVersion, Kind: manifest.Kind, Project: manifest.Project{Name: name, Slug: manifest.Slug(name), ID: projectID}, Workspace: manifest.Workspace{Root: options.WorkspaceRoot}, Terminal: manifest.Terminal{Mode: terminal}}
 		if options.FromCompose != "" {
-			candidates, _, err := Discover(root, options.FromCompose)
+			candidates, _, err := Discover(workspaceRoot, options.FromCompose)
 			if err != nil {
 				return Result{}, err
 			}
@@ -127,8 +146,13 @@ func NonInteractive(options Options, content []byte, name, terminal string) (Res
 		if err != nil {
 			return Result{}, err
 		}
+	} else {
+		workspaceRoot, err = manifest.ResolveWorkspaceRootContent(root, content)
+		if err != nil {
+			return Result{}, err
+		}
 	}
-	decoded, normalized, err := manifest.Decode(content, root)
+	decoded, normalized, err := manifest.Decode(content, workspaceRoot)
 	if err != nil {
 		return Result{}, err
 	}

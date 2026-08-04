@@ -21,23 +21,44 @@ func TestHeadlessLifecycleEndToEnd(t *testing.T) {
 		t.Skip("Process Compose is unavailable")
 	}
 	directory := t.TempDir()
-	binary := filepath.Join(directory, "rungrid")
-	repositoryRoot := filepath.Clean(filepath.Join("..", "..", ".."))
-	build := exec.Command("go", "build", "-o", binary, ".")
-	build.Dir = repositoryRoot
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build Rungrid: %v\n%s", err, output)
-	}
+	binary, repositoryRoot := buildRungrid(t, directory)
 	stateDirectory := filepath.Join(directory, "state")
+	runtimePath := filepath.Join(stateDirectory, "rungrid", "projects", "headless-example-r5n2w7", "runtime.json")
+	t.Setenv("RUNGRID_TEST_RUNTIME_PATH", runtimePath)
 	workspace := filepath.Join(directory, "workspace")
-	if err := os.MkdirAll(workspace, 0o700); err != nil {
+	control := filepath.Join(workspace, "control")
+	for _, path := range []string{control, filepath.Join(workspace, "api"), filepath.Join(workspace, "web")} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hook := filepath.Join(workspace, "lifecycle-hook")
+	hookContent := `#!/bin/sh
+if [ "$1" = "after" ] && [ -e "$RUNGRID_TEST_RUNTIME_PATH" ]; then
+  printf 'after-before-runtime-stop\n' >> lifecycle-events
+  exit 9
+fi
+printf '%s\n' "$1" >> lifecycle-events
+`
+	if err := os.WriteFile(hook, []byte(hookContent), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	fixture, err := os.ReadFile(filepath.Join(repositoryRoot, "testdata", "headless", ".rungrid.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := filepath.Join(workspace, ".rungrid.yaml")
+	fixture = bytes.Replace(fixture, []byte("runtime:\n"), []byte(`workspace:
+  root: ..
+lifecycle:
+  before_up:
+    - name: prepare
+      run: {argv: [./lifecycle-hook, before]}
+  after_down:
+    - name: cleanup
+      run: {argv: [./lifecycle-hook, after]}
+runtime:
+`), 1)
+	config := filepath.Join(control, ".rungrid.yaml")
 	fixture = bytes.Replace(fixture, []byte("mode: headless"), []byte("mode: warp"), 1)
 	if err := os.WriteFile(config, fixture, 0o600); err != nil {
 		t.Fatal(err)
@@ -52,9 +73,14 @@ func TestHeadlessLifecycleEndToEnd(t *testing.T) {
 		}
 		return output
 	}
+	plan := run("--json", "plan")
+	if bytes.Contains(plan, []byte(workspace)) {
+		t.Fatalf("portable plan contains temporary absolute workspace path: %s", plan)
+	}
 	run("up", "--headless", "--no-open")
 	t.Cleanup(func() { _ = exec.Command(binary, append(baseArguments, "down")...).Run() })
-	runtimePath := filepath.Join(stateDirectory, "rungrid", "projects", "headless-example-r5n2w7", "runtime.json")
+	run("up", "--headless", "--no-open")
+	assertE2ELines(t, filepath.Join(workspace, "lifecycle-events"), []string{"before"})
 	runtimeRecord, err := os.ReadFile(runtimePath)
 	if err != nil {
 		t.Fatal(err)
@@ -84,12 +110,12 @@ func TestHeadlessLifecycleEndToEnd(t *testing.T) {
 	if err := os.WriteFile(runtimePath, runtimeRecord, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	overlay := filepath.Join(workspace, ".rungrid.local.yaml")
+	overlay := filepath.Join(control, ".rungrid.local.yaml")
 	if err := os.WriteFile(overlay, []byte("api_version: rungrid/v1\nkind: Workspace\nruntime:\n  startup_timeout: 11s\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	changedArguments := []string{"--config", config, "--local", overlay, "--state-dir", stateDirectory, "generate"}
-	if output, err := exec.Command(binary, changedArguments...).CombinedOutput(); err == nil || !strings.Contains(string(output), "different runtime generation is active") {
+	if output, err := exec.Command(binary, changedArguments...).CombinedOutput(); err == nil || !strings.Contains(string(output), "requires lifecycle cleanup") {
 		t.Fatalf("active-generation guard did not fail closed: err=%v output=%s", err, output)
 	}
 	if err := os.Remove(overlay); err != nil {
@@ -126,8 +152,89 @@ func TestHeadlessLifecycleEndToEnd(t *testing.T) {
 	}
 	_ = restarted.Wait()
 	run("down")
+	assertE2ELines(t, filepath.Join(workspace, "lifecycle-events"), []string{"before", "after"})
+	run("down")
+	assertE2ELines(t, filepath.Join(workspace, "lifecycle-events"), []string{"before", "after"})
 	if _, err := os.Stat(filepath.Join(stateDirectory, "rungrid", "projects", "headless-example-r5n2w7", "runtime.json")); !os.IsNotExist(err) {
 		t.Fatalf("runtime record remains after down: %v", err)
+	}
+}
+
+func TestTabOnlyLifecycleEndToEnd(t *testing.T) {
+	if os.Getenv("RUNGRID_E2E") != "1" {
+		t.Skip("set RUNGRID_E2E=1 to run the real Process Compose lifecycle")
+	}
+	if _, err := exec.LookPath("process-compose"); err != nil {
+		t.Skip("Process Compose is unavailable")
+	}
+	directory := t.TempDir()
+	binary, _ := buildRungrid(t, directory)
+	stateDirectory := filepath.Join(directory, "state")
+	workspace := filepath.Join(directory, "workspace")
+	control := filepath.Join(workspace, "control")
+	if err := os.MkdirAll(filepath.Join(workspace, "api"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(control, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(workspace, "hook")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" >> lifecycle-events\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configuration := `api_version: rungrid/v1
+kind: Workspace
+project: {name: Tab Only, slug: tab-only, id: tab-only-k7m4q2}
+workspace: {root: ..}
+terminal: {mode: headless, open: false}
+lifecycle:
+  before_up:
+    - {name: prepare, run: {argv: [./hook, before]}}
+  after_down:
+    - {name: cleanup, run: {argv: [./hook, after]}}
+services:
+  - name: api
+    source: native
+    activation: tab
+    working_directory: api
+    run: {argv: [sh, -c, "while true; do sleep 1; done"]}
+    terminal: {trigger_argv: [make, dev]}
+`
+	config := filepath.Join(control, ".rungrid.yaml")
+	if err := os.WriteFile(config, []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	arguments := []string{"--config", config, "--state-dir", stateDirectory}
+	for _, action := range [][]string{{"up", "--no-open"}, {"status"}, {"down"}} {
+		command := exec.Command(binary, append(arguments, action...)...)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("rungrid %s: %v\n%s", strings.Join(action, " "), err, output)
+		}
+	}
+	assertE2ELines(t, filepath.Join(workspace, "lifecycle-events"), []string{"before", "after"})
+}
+
+func buildRungrid(t *testing.T, directory string) (string, string) {
+	t.Helper()
+	binary := filepath.Join(directory, "rungrid")
+	repositoryRoot := filepath.Clean(filepath.Join("..", "..", ".."))
+	build := exec.Command("go", "build", "-o", binary, ".")
+	build.Dir = repositoryRoot
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build Rungrid: %v\n%s", err, output)
+	}
+	return binary, repositoryRoot
+}
+
+func assertE2ELines(t *testing.T, filename string, expected []string) {
+	t.Helper()
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual := strings.Fields(string(content))
+	if strings.Join(actual, ",") != strings.Join(expected, ",") {
+		t.Fatalf("lifecycle events = %#v, want %#v", actual, expected)
 	}
 }
 

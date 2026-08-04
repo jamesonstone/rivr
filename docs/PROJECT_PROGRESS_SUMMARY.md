@@ -14,15 +14,16 @@ before loading broader history.
   contract.
 - [`specs/rungrid-v1/SPEC.md`](specs/rungrid-v1/SPEC.md) records v1 rationale,
   implementation discoveries, validation, and delivery gates.
-- Process Compose is the only lifecycle authority; terminal presentation never
-  maintains a competing service state.
+- Process Compose is the managed-service lifecycle authority; terminal
+  presentation never maintains a competing service state. Rungrid's journal is
+  authoritative for one-shot workspace prerequisites and teardown.
 - Release and consumer-workspace changes remain separate mutation boundaries.
 
 ## FEATURE PROGRESS TABLE
 
 | Feature | Source | Highest completed artifact | Status |
 | --- | --- | --- | --- |
-| `rungrid-v1` | `docs/specs/rungrid-v1/SPEC.md` | Integrated implementation and local validation candidate on issue/branch `GH-3`. | Ready for pull-request review; history rewrite, graphical smoke, license selection, release publication, and consumer cutover remain gated. |
+| `rungrid-v1` | `docs/specs/rungrid-v1/SPEC.md` | Integrated implementation on `GH-3` plus locally validated workspace-root and lifecycle extension on `GH-10`. | Ready for pull-request review; graphical smoke, license selection, release publication, and consumer cutover remain gated. |
 
 ## FEATURE SUMMARIES
 
@@ -32,9 +33,10 @@ before loading broader history.
 - **INTENT**: Replace repository-owned development-workspace scripts with a
   neutral manifest and one truthful Process Compose lifecycle.
 - **IMPLEMENTED**: Portable manifest processing, safe generated state,
-  workspace/tab/external activation, detached lifecycle, exclusive sessions,
-  ordered Warp tabs, headless operation, Versions, onboarding, tests, CI, and
-  release packaging.
+  multi-repository workspace roots, crash-safe one-shot prerequisites and
+  teardown, workspace/tab/external activation, detached managed-service
+  lifecycle, exclusive sessions, ordered Warp tabs, headless operation,
+  Versions, onboarding, tests, CI, and release packaging.
 - **OPEN ITEMS**: Review and merge, choose a license, observe hosted checks,
   perform a controlled Warp smoke, publish the release candidate, then deliver
   consumer migration separately. The protected-history rewrite is excluded.
@@ -44,6 +46,7 @@ before loading broader history.
 
 - The Go CLI implements the complete documented command surface, strict
   manifest merge and validation, XDG state, deterministic generation,
+  symlink-aware workspace boundaries, lifecycle journaling and recovery,
   Process Compose supervision, exact native and Compose execution, exclusive
   sessions, Warp/headless presentation, Versions, onboarding, and uninstall.
 - Unit, integration, race, golden, contract, fake-executable, and real
@@ -65,6 +68,8 @@ before loading broader history.
 
 ## Last updated
 
+- 2026-08-03: Implemented and locally validated portable workspace roots and
+  crash-safe lifecycle hooks; kept consumer adoption as a separate lane.
 - 2026-08-01: Implemented and locally validated the integrated Rungrid v1
   review candidate; recorded remaining privacy, delivery, release, graphical,
   and consumer-migration gates.

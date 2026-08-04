@@ -40,7 +40,7 @@ func newModel(options Options, candidates []Candidate, discoveryHash, projectID 
 	if options.DraftPath != "" {
 		if content, err := os.ReadFile(options.DraftPath); err == nil {
 			var draft Draft
-			if json.Unmarshal(content, &draft) == nil && draft.APIVersion == "rungrid/output/v1" && draft.FlowVersion == 2 && draft.DiscoveryHash == discoveryHash && len(draft.Selected) == len(selected) {
+			if json.Unmarshal(content, &draft) == nil && draft.APIVersion == "rungrid/output/v1" && draft.FlowVersion == 3 && draft.DiscoveryHash == discoveryHash && draft.WorkspaceRoot == options.WorkspaceRoot && len(draft.Selected) == len(selected) {
 				result.input.SetValue(draft.Name)
 				result.terminal = draft.Terminal
 				result.environment = draft.Environment

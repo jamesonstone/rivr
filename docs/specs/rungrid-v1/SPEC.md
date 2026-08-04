@@ -1,6 +1,6 @@
 # Rungrid v1 implementation record
 
-Status: implemented and locally validated; delivery gates remain
+Status: v1 candidate implemented; workspace lifecycle extension locally validated
 
 ## Purpose
 
@@ -49,11 +49,76 @@ in Overview while preserving direct per-tab control.
   dashboard or a separate all-logs tab in v1.
 - Additional graphical terminal adapters and command-free multi-pane workspaces
   are deliberately outside v1.
+- Coding-agent onboarding is a read-only instruction surface, not a second
+  configuration or discovery engine. `instructions` and its `agent-start`
+  alias emit one self-contained brief that teaches an agent to inspect the
+  selected consumer projects and author the portable manifest under each
+  repository's own rules.
+- Help is a first-class operator surface. It borrows Kit's presentation
+  grammar—ASCII identity, workflow grouping, terminal-aware color, and stable
+  plain output—while using Rungrid's own lifecycle and ownership model. Color
+  is never semantic and explicit color suppression remains authoritative.
 - Default-branch history rewriting is excluded from implementation lanes. The
   neutral contract is delivered normally; historical objects and archived pull
   request references may retain earlier content.
 
+## Workspace lifecycle extension
+
+Multi-repository workspaces are a core portability requirement. A manifest may
+live in one repository while describing sibling repositories under a common
+relative workspace root. Infrastructure setup and final teardown are ordered,
+one-shot workspace lifecycle operations rather than long-running Process
+Compose services.
+
+This extension is delivered in two review lanes. Rungrid issue `#10` owns the
+neutral manifest, runtime, recovery, command, test, and documentation changes.
+Only after those prerequisites are reviewable will a separate consumer issue,
+branch, specification, and ready pull request adopt the feature. Rungrid source
+and fixtures remain free of consumer names, paths, and commands.
+
+Material decisions for this extension:
+
+- The manifest directory and workspace root are distinct. `workspace.root`
+  defaults to `.`, is relative to the manifest directory, may name an ancestor,
+  and is resolved with symlink-aware containment checks.
+- The source manifest establishes the workspace boundary before imports are
+  traversed. Imported fragments cannot redefine it; the adjacent ignored local
+  overlay remains anchored to the manifest directory.
+- Services, Compose files, and environment-provider paths resolve from the
+  workspace root. Stable identity and deterministic generation use only the
+  relative declaration; absolute resolved paths remain machine-local runtime
+  data.
+- `lifecycle.before_up` and `lifecycle.after_down` are sequential structured
+  argument vectors. They reuse environment providers and redaction, but are
+  never emitted as Process Compose processes or Warp tabs.
+- The lifecycle journal records teardown intent before the first prerequisite
+  mutates external state. Required teardown survives prerequisite failure,
+  supervisor startup failure, signals, process crashes, and a missing runtime
+  record.
+- One project-scoped lifecycle lock serializes `up`, `down`, recovery, and
+  uninstall. Service-level `start` and `stop` preserve their existing scope and
+  never invoke global hooks.
+- Cleanup attempts every teardown command, retains `cleanup-required` on any
+  failure, and must complete under the recorded generation before a different
+  generation may start.
+- Exact PID and socket identity remain hard safety gates. A stale or ambiguous
+  runtime is not permission to rerun prerequisites, signal a process, delete a
+  socket, or discard teardown state.
+
+The implementation sequence is contract and manifest loading, deterministic
+planning, journal and executor, lifecycle command integration, recovery and
+uninstall behavior, then generic tests and delivery validation. The consumer
+lane follows only after the neutral lane is complete.
+
 ## Delivery record
+
+Issue `#12` adds the coding-agent instruction surface to the existing `GH-10`
+branch and pull request at the user's direction. It retains separate issue and
+commit traceability without creating a second branch or review candidate.
+
+Issue `#13` adds the CLI help redesign to the same branch and pull request at
+the user's direction, with its own scoped commits and validation evidence. Kit
+is read-only design evidence; no cross-repository change is part of this lane.
 
 The accepted plan proposed a separate issue, branch, and pull request for each
 stage. The repository implementation was completed as one dependency-ordered
@@ -98,9 +163,8 @@ Status: implemented in `GH-3`; release publication is gated.
 
 ### Stage 5: legacy-workspace dogfood and cutover
 
-Status: blocked pending review, merge, a chosen repository license, a published
-release candidate, and controlled graphical validation. This stage is performed
-in the consumer repository, not this repository.
+Status: implemented and locally validated on `GH-10`. Consumer adoption remains
+a separate repository lane and is not part of this branch.
 
 - Express the legacy workspace as a manifest, replace active wrappers without
   duplicating service inventory, retain isolated rollback material for one
@@ -131,6 +195,38 @@ in the consumer repository, not this repository.
   configuration directory. The client keeps these streams separate so
   diagnostics cannot corrupt machine-readable state while failed command
   output remains redacted.
+- The source manifest must establish and validate the workspace root before an
+  import path can be resolved. Imports and the ignored local overlay are then
+  merged without permitting either input to change that boundary.
+- A valid tab-only Process Compose generation has every process disabled. The
+  detached runtime may still be ready even though no managed service is running
+  until a session explicitly starts one.
+- Lifecycle cleanup cannot depend on a runtime record. A durable teardown
+  obligation must remain actionable after supervisor startup fails or its
+  runtime identity disappears.
+- Replacing an advisory-lock file while a process is waiting can split mutual
+  exclusion across inodes. The lock holder therefore validates the acquired
+  inode and reacquires when the path was replaced.
+- Environment-provider paths receive the same execution-time, symlink-aware
+  workspace boundary check as static service and lifecycle paths.
+- A headless plan must derive its artifact list from the effective terminal
+  mode, not from the graphical mode in source configuration.
+- Process Compose 1.120 rejects the intuitive `warning` log level after
+  generation. Rungrid now validates the exact accepted levels in both its
+  semantic validator and published schema so this fails before lifecycle
+  mutation.
+- A top-level executable check is insufficient for common structured command
+  vectors such as `env ... direnv exec . make dev`. Planning and Doctor now
+  expose each supported wrapper layer plus the tab trigger without attempting
+  to parse opaque shell command strings.
+- The local command symlink recipe must fail closed when privilege elevation or
+  link replacement fails. It verifies the final link target before reporting
+  success, matching the existing local `kit`, `yp`, and `kp` command layout.
+- An agent handoff must work before a manifest exists. The command therefore
+  treats the selected manifest and project paths as inert prompt data, performs
+  no discovery or mutation itself, and emits the same content through both the
+  human and versioned JSON surfaces. Consumer repository rules and explicit
+  lifecycle authorization remain authoritative.
 
 ## Validation record
 
@@ -140,6 +236,15 @@ Local validation completed on macOS with Process Compose 1.120.0:
   sanitization, native build, and Darwin/Linux amd64/arm64 builds.
 - `make lint`: zero `golangci-lint` findings.
 - `make vuln`: no reachable vulnerabilities reported by `govulncheck`.
+- Focused command and prompt-builder tests prove that `instructions` and
+  `agent-start` are equivalent, root help names the alias, JSON uses the
+  versioned `AgentInstructions` envelope, and path hints remain encoded data.
+- Help presentation tests pin the complete plain root output, require every
+  visible command to appear in exactly one workflow group, exercise root and
+  subcommand help through both invocation forms, prove terminal ANSI styling,
+  and prove `--no-color` and `NO_COLOR` suppression. Kit's help implementation
+  and live terminal output were inspected as design evidence without modifying
+  that repository.
 - `tests/end-to-end/local/run.sh`: real detached Process Compose lifecycle,
   runtime identity tamper rejection, active-generation protection, exclusive
   tab sessions, stop/restart, cleanup, and immutable ignored evidence.
@@ -151,18 +256,51 @@ Local validation completed on macOS with Process Compose 1.120.0:
 - A Linux/arm64 container reproduction with Process Compose 1.120.0 exercised
   workspace startup, tab-session ownership, `Disabled` to `Running` to
   `Completed` transitions, interrupt handling, status JSON, and shutdown.
+- Workspace-root and lifecycle tests cover sibling repositories, symlink
+  escapes, overlay replacement, exact argument vectors, timeouts, cancellation,
+  redaction, lock replacement, journaling, rollback, missing-runtime cleanup,
+  retry and no-op teardown, and uninstall refusal while cleanup is required.
+- Real mixed-service and tab-only headless runs prove prerequisites precede the
+  supervisor, teardown follows it, repeated `up` does not repeat prerequisites,
+  and Process Compose remains the managed-service lifecycle authority.
+- A follow-up real headless run after Process Compose log-level and structured
+  executable discovery changes passed both mixed-service and tab-only suites;
+  clean-source ignored evidence is recorded as run
+  `20260803T152616Z-051963` at commit `5d62241`.
+- The coding-agent instruction command was followed by another clean-source
+  mixed-service and tab-only headless run. Ignored evidence is recorded as run
+  `20260804T120123Z-084621` at commit `534cc8c`; the release snapshot also built
+  all four archives from that exact commit.
+- The help redesign was followed by a clean-source mixed-service and tab-only
+  headless run. Ignored evidence is recorded as run
+  `20260804T121733Z-014138` at commit `a4ffcef`; the release snapshot built all
+  four archives from the same commit.
+- `make build` was exercised under a temporary writable prefix and produced an
+  exact `bin/rungrid` symlink. The existing `/usr/local/bin/rungrid` link uses
+  the same canonical-repository layout as `kit`, `yp`, and `kp`; no
+  administrator-authenticated link replacement was claimed from the worktree.
 
 The pull-request workflow includes the same Process Compose version and uploads
 immutable run evidence. Hosted checks exposed and now cover Linux socket-path
 reporting and separation of Process Compose diagnostics from JSON responses.
-The graphical Warp smoke, signing, SBOM generation, published release, and
-consumer-workspace parity are not observed and are not passing claims.
+The graphical Warp smoke, local SBOM generation, action-workflow linting,
+signing, published release, and consumer-workspace parity are not observed and
+are not passing claims. Their required local tools or controlled graphical
+environment were unavailable where applicable.
 
 ## Outcome
 
 Rungrid v1 is implemented as a review candidate with the neutral contract,
-portable manifest, lifecycle runtime, Warp/headless presentation, onboarding,
-tests, CI, and release packaging. Default-branch history was not rewritten:
+portable multi-repository workspace boundary, crash-safe one-shot lifecycle,
+Process Compose runtime, Warp/headless presentation, onboarding, tests, CI, and
+release packaging. A read-only agent instruction surface can now hand the
+portable integration contract and selected path hints to a coding agent before
+the manifest exists. Root and subcommand help now expose the same contract in a
+Rungrid-specific, workflow-grouped terminal presentation with a stable plain
+fallback. The neutral implementation is ready for a separately owned consumer
+cutover lane; this outcome does not claim consumer parity.
+
+Default-branch history was not rewritten:
 repository guardrails prohibit force pushing or mutating the default branch,
 and archived pull-request refs or direct object URLs could retain old content
 even after a branch rewrite. Release publication remains gated on review,

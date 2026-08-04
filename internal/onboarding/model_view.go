@@ -17,7 +17,7 @@ func (m model) View() string {
 	case 0:
 		return title.Render("Rungrid onboarding") + "\n\nProject name\n" + m.input.View() + "\n\n" + muted.Render("Enter continue • Ctrl-C cancel")
 	case 1:
-		return title.Render("Workspace path") + "\n\n" + m.options.Root + "\n\n" + muted.Render("Enter accept • b back")
+		return title.Render("Workspace path") + "\n\nManifest directory: " + m.options.Root + "\nWorkspace root: " + m.options.WorkspaceRoot + "\n\n" + muted.Render("Enter accept • b back")
 	case 2:
 		return title.Render("Terminal mode") + "\n\n  " + choice("warp", m.terminal) + "   " + choice("headless", m.terminal) + "\n\n" + muted.Render("←/→ choose • Enter continue • b back")
 	case 3:
@@ -60,7 +60,7 @@ func (m model) servicesView(title, muted lipgloss.Style) string {
 }
 
 func (m model) buildManifest() *manifest.Manifest {
-	result := &manifest.Manifest{APIVersion: manifest.APIVersion, Kind: manifest.Kind, Project: manifest.Project{Name: strings.TrimSpace(m.input.Value()), Slug: manifest.Slug(m.input.Value()), ID: m.projectID}, Terminal: manifest.Terminal{Mode: m.terminal}}
+	result := &manifest.Manifest{APIVersion: manifest.APIVersion, Kind: manifest.Kind, Project: manifest.Project{Name: strings.TrimSpace(m.input.Value()), Slug: manifest.Slug(m.input.Value()), ID: m.projectID}, Workspace: manifest.Workspace{Root: m.options.WorkspaceRoot}, Terminal: manifest.Terminal{Mode: m.terminal}}
 	for i, candidate := range m.candidates {
 		if m.selected[i] {
 			result.Services = append(result.Services, candidateService(candidate))
@@ -98,7 +98,7 @@ func (m model) saveDraft() {
 	if m.options.DraftPath == "" {
 		return
 	}
-	draft := Draft{APIVersion: "rungrid/output/v1", FlowVersion: 2, DiscoveryHash: m.discoveryHash, Name: m.input.Value(), Terminal: m.terminal, Environment: m.environment, LinkDependencies: m.linkDependencies, Selected: m.selected, Screen: m.screen}
+	draft := Draft{APIVersion: "rungrid/output/v1", FlowVersion: 3, DiscoveryHash: m.discoveryHash, Name: m.input.Value(), Terminal: m.terminal, Environment: m.environment, WorkspaceRoot: m.options.WorkspaceRoot, LinkDependencies: m.linkDependencies, Selected: m.selected, Screen: m.screen}
 	content, _ := json.MarshalIndent(draft, "", "  ")
 	_ = atomicWrite(m.options.DraftPath, append(content, '\n'), 0o600)
 }

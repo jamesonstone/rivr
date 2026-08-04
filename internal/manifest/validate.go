@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -16,6 +17,8 @@ var (
 	triggerNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 	secretKeyPattern   = regexp.MustCompile(`(?i)(secret|token|password|passwd|private[_-]?key|api[_-]?key|credential)`)
 )
+
+func SecretLikeKey(key string) bool { return secretKeyPattern.MatchString(key) }
 
 func Validate(m *Manifest, root string) error {
 	var problems []string
@@ -38,6 +41,9 @@ func Validate(m *Manifest, root string) error {
 	} else if !projectIDPattern.MatchString(m.Project.ID) || !strings.HasPrefix(m.Project.ID, m.Project.Slug+"-") {
 		add("project.id", "must be the project slug plus a six-character lowercase base32 suffix")
 	}
+	if filepath.IsAbs(m.Workspace.Root) {
+		add("workspace.root", "must be relative to the manifest directory")
+	}
 	if m.Runtime.StartupTimeout.Duration <= 0 {
 		add("runtime.startup_timeout", "must be positive")
 	}
@@ -50,9 +56,16 @@ func Validate(m *Manifest, root string) error {
 	if strings.TrimSpace(m.Runtime.ProcessCompose.Executable) == "" {
 		add("runtime.process_compose.executable", "is required")
 	}
+	if !map[string]bool{
+		"trace": true, "debug": true, "info": true, "warn": true,
+		"error": true, "fatal": true, "panic": true, "disabled": true,
+	}[m.Runtime.ProcessCompose.LogLevel] {
+		add("runtime.process_compose.log_level", "must be trace, debug, info, warn, error, fatal, panic, or disabled")
+	}
 	if m.Terminal.Mode != "warp" && m.Terminal.Mode != "headless" {
 		add("terminal.mode", "must be warp or headless")
 	}
+	validateLifecycle(root, m.Lifecycle, add)
 
 	names := make(map[string]int, len(m.Services))
 	for i := range m.Services {
@@ -115,7 +128,7 @@ func Validate(m *Manifest, root string) error {
 				add(prefix+".terminal.trigger_argv[0]", "must be a simple executable name that can be wrapped by zsh")
 			}
 		}
-		validateEnvironment(root, service, prefix, add)
+		validateEnvironment(root, service.Environment, service.WorkingDirectory, prefix+".environment", add)
 		validateHealth(service.Health, prefix+".health", add)
 		if service.Restart.Policy != "no" && service.Restart.Policy != "always" && service.Restart.Policy != "on-failure" {
 			add(prefix+".restart.policy", "must be no, always, or on-failure")

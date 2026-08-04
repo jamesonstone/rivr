@@ -35,9 +35,11 @@ type Manifest struct {
 	APIVersion string    `yaml:"api_version" json:"api_version"`
 	Kind       string    `yaml:"kind" json:"kind"`
 	Project    Project   `yaml:"project" json:"project"`
+	Workspace  Workspace `yaml:"workspace,omitempty" json:"workspace"`
 	Imports    []string  `yaml:"imports,omitempty" json:"imports,omitempty"`
 	Runtime    Runtime   `yaml:"runtime,omitempty" json:"runtime"`
 	Terminal   Terminal  `yaml:"terminal,omitempty" json:"terminal"`
+	Lifecycle  Lifecycle `yaml:"lifecycle,omitempty" json:"lifecycle"`
 	Services   []Service `yaml:"services" json:"services"`
 }
 
@@ -45,6 +47,23 @@ type Project struct {
 	Name string `yaml:"name" json:"name"`
 	Slug string `yaml:"slug,omitempty" json:"slug"`
 	ID   string `yaml:"id,omitempty" json:"id"`
+}
+
+type Workspace struct {
+	Root string `yaml:"root,omitempty" json:"root"`
+}
+
+type Lifecycle struct {
+	BeforeUp  []LifecycleCommand `yaml:"before_up,omitempty" json:"before_up,omitempty"`
+	AfterDown []LifecycleCommand `yaml:"after_down,omitempty" json:"after_down,omitempty"`
+}
+
+type LifecycleCommand struct {
+	Name             string      `yaml:"name" json:"name"`
+	WorkingDirectory string      `yaml:"working_directory,omitempty" json:"working_directory"`
+	Timeout          Duration    `yaml:"timeout,omitempty" json:"timeout"`
+	Run              Command     `yaml:"run" json:"run"`
+	Environment      Environment `yaml:"environment,omitempty" json:"environment,omitempty"`
 }
 
 type Runtime struct {
@@ -146,6 +165,9 @@ func (m *Manifest) ApplyDefaults() {
 	if m.Project.Slug == "" {
 		m.Project.Slug = Slug(m.Project.Name)
 	}
+	if m.Workspace.Root == "" {
+		m.Workspace.Root = "."
+	}
 	if m.Runtime.StartupTimeout.Duration == 0 {
 		m.Runtime.StartupTimeout.Duration = 45 * time.Second
 	}
@@ -167,6 +189,8 @@ func (m *Manifest) ApplyDefaults() {
 	if m.Terminal.Open == nil {
 		m.Terminal.Open = Bool(m.Terminal.Mode == "warp")
 	}
+	applyLifecycleDefaults(m.Lifecycle.BeforeUp, m.Runtime.StartupTimeout.Duration)
+	applyLifecycleDefaults(m.Lifecycle.AfterDown, m.Runtime.ShutdownTimeout.Duration)
 	for i := range m.Services {
 		s := &m.Services[i]
 		if s.Activation == "" {
@@ -222,6 +246,26 @@ func (m *Manifest) ApplyDefaults() {
 			if s.Environment.Providers[j].Timeout.Duration == 0 {
 				s.Environment.Providers[j].Timeout.Duration = 10 * time.Second
 			}
+		}
+	}
+}
+
+func applyLifecycleDefaults(commands []LifecycleCommand, timeout time.Duration) {
+	for i := range commands {
+		if commands[i].WorkingDirectory == "" {
+			commands[i].WorkingDirectory = "."
+		}
+		if commands[i].Timeout.Duration == 0 {
+			commands[i].Timeout.Duration = timeout
+		}
+		applyProviderDefaults(&commands[i].Environment)
+	}
+}
+
+func applyProviderDefaults(environment *Environment) {
+	for i := range environment.Providers {
+		if environment.Providers[i].Timeout.Duration == 0 {
+			environment.Providers[i].Timeout.Duration = 10 * time.Second
 		}
 	}
 }

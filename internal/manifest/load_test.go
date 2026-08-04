@@ -136,6 +136,31 @@ func TestLiteralSecretLikeEnvironmentKeyRejected(t *testing.T) {
 	}
 }
 
+func TestProcessComposeLogLevelValidation(t *testing.T) {
+	t.Parallel()
+	for _, level := range []string{"trace", "debug", "info", "warn", "error", "fatal", "panic", "disabled"} {
+		configuration := validEmptyManifest(level)
+		if err := Validate(&configuration, t.TempDir()); err != nil {
+			t.Errorf("accepted Process Compose log level %q: %v", level, err)
+		}
+	}
+	configuration := validEmptyManifest("warning")
+	if err := Validate(&configuration, t.TempDir()); err == nil || !strings.Contains(err.Error(), "runtime.process_compose.log_level") {
+		t.Fatalf("expected invalid Process Compose log-level error, got %v", err)
+	}
+}
+
+func validEmptyManifest(logLevel string) Manifest {
+	configuration := Manifest{
+		APIVersion: APIVersion,
+		Kind:       Kind,
+		Project:    Project{Name: "Example", Slug: "example", ID: "example-k7m4q2"},
+	}
+	configuration.ApplyDefaults()
+	configuration.Runtime.ProcessCompose.LogLevel = logLevel
+	return configuration
+}
+
 func FuzzSlug(f *testing.F) {
 	for _, seed := range []string{"Example Workspace", "API_and Web", "a/b", "", "éxample"} {
 		f.Add(seed)

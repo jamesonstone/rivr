@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/manifest"
 	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/state"
+	"github.com/jamesonstone/rungrid/internal/workspace"
 )
 
 type Check struct {
@@ -35,6 +37,11 @@ func Run(ctx context.Context, loaded *manifest.Loaded, stateOverride string, fix
 		}
 	}
 	add(Check{Name: "manifest", Status: "ok", Summary: "manifest is valid"})
+	add(Check{
+		Name: "workspace-root", Status: "ok",
+		Summary: "relative workspace root is valid and contains the manifest directory",
+		Detail:  loaded.Manifest.Workspace.Root,
+	})
 
 	pc := loaded.Manifest.Runtime.ProcessCompose.Executable
 	if resolved, err := exec.LookPath(pc); err != nil {
@@ -56,6 +63,23 @@ func Run(ctx context.Context, loaded *manifest.Loaded, stateOverride string, fix
 			add(Check{Name: "executable:" + executable, Status: "error", Summary: "required executable was not found"})
 		} else {
 			add(Check{Name: "executable:" + executable, Status: "ok", Summary: "required executable is available"})
+		}
+	}
+	phases := []struct {
+		name     string
+		commands []manifest.LifecycleCommand
+	}{
+		{name: "before_up", commands: loaded.Manifest.Lifecycle.BeforeUp},
+		{name: "after_down", commands: loaded.Manifest.Lifecycle.AfterDown},
+	}
+	for _, phase := range phases {
+		for _, lifecycleCommand := range phase.commands {
+			name := "lifecycle:" + phase.name + ":" + lifecycleCommand.Name
+			if err := lifecycleExecutable(loaded.WorkspaceRoot, lifecycleCommand); err != nil {
+				add(Check{Name: name, Status: "error", Summary: "lifecycle executable is unavailable", Detail: err.Error()})
+			} else {
+				add(Check{Name: name, Status: "ok", Summary: "lifecycle executable is available"})
+			}
 		}
 	}
 
@@ -94,6 +118,15 @@ func Run(ctx context.Context, loaded *manifest.Loaded, stateOverride string, fix
 	} else {
 		add(Check{Name: "state", Status: "error", Summary: "project state directory cannot be inspected", Detail: statErr.Error()})
 	}
+	if err == nil {
+		if journal, exists, journalErr := workspace.ReadJournalIfPresent(layout); journalErr != nil {
+			add(Check{Name: "lifecycle", Status: "error", Summary: "lifecycle journal is invalid", Detail: journalErr.Error()})
+		} else if exists && journal.TeardownRequired {
+			add(Check{Name: "lifecycle", Status: "warning", Summary: "workspace teardown remains required", Detail: journal.State})
+		} else if exists {
+			add(Check{Name: "lifecycle", Status: "ok", Summary: "lifecycle journal is consistent", Detail: journal.State})
+		}
+	}
 	return report
 }
 
@@ -108,21 +141,47 @@ func requiredExecutables(m *manifest.Manifest) []string {
 		result = append(result, value)
 	}
 	for _, service := range m.Services {
-		if service.Run != nil && len(service.Run.Argv) > 0 {
-			add(service.Run.Argv[0])
+		if service.Run != nil {
+			for _, executable := range manifest.CommandExecutables(service.Run.Argv) {
+				add(executable)
+			}
 		}
-		if service.Compose != nil && len(service.Compose.UpArgv) > 0 {
-			add(service.Compose.UpArgv[0])
+		if service.Compose != nil {
+			for _, executable := range manifest.CommandExecutables(service.Compose.UpArgv) {
+				add(executable)
+			}
 		}
-		if service.External != nil && service.External.Command != nil && len(service.External.Command.Argv) > 0 {
-			add(service.External.Command.Argv[0])
+		if service.External != nil && service.External.Command != nil {
+			for _, executable := range manifest.CommandExecutables(service.External.Command.Argv) {
+				add(executable)
+			}
 		}
-		if service.Health != nil && service.Health.Command != nil && len(service.Health.Command.Argv) > 0 {
-			add(service.Health.Command.Argv[0])
+		if service.Health != nil && service.Health.Command != nil {
+			for _, executable := range manifest.CommandExecutables(service.Health.Command.Argv) {
+				add(executable)
+			}
+		}
+		if service.Activation == "tab" && len(service.Terminal.TriggerArgv) > 0 {
+			add(service.Terminal.TriggerArgv[0])
 		}
 		for _, provider := range service.Environment.Providers {
-			if provider.Type == "command" && len(provider.Argv) > 0 {
-				add(provider.Argv[0])
+			if provider.Type == "command" {
+				for _, executable := range manifest.CommandExecutables(provider.Argv) {
+					add(executable)
+				}
+			}
+			if provider.Type == "direnv" {
+				add("direnv")
+			}
+		}
+	}
+	commands := append(append([]manifest.LifecycleCommand(nil), m.Lifecycle.BeforeUp...), m.Lifecycle.AfterDown...)
+	for _, command := range commands {
+		for _, provider := range command.Environment.Providers {
+			if provider.Type == "command" {
+				for _, executable := range manifest.CommandExecutables(provider.Argv) {
+					add(executable)
+				}
 			}
 			if provider.Type == "direnv" {
 				add("direnv")
@@ -145,4 +204,23 @@ func processComposeVersion(ctx context.Context, executable string) (string, erro
 		}
 	}
 	return "", fmt.Errorf("version line was missing")
+}
+
+func lifecycleExecutable(root string, command manifest.LifecycleCommand) error {
+	executable := command.Run.Argv[0]
+	if !strings.ContainsRune(executable, os.PathSeparator) {
+		_, err := exec.LookPath(executable)
+		return err
+	}
+	if !filepath.IsAbs(executable) {
+		executable = filepath.Join(root, command.WorkingDirectory, executable)
+	}
+	info, err := os.Stat(executable)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("not executable")
+	}
+	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/state"
 	"github.com/jamesonstone/rungrid/internal/terminalshell"
 	"github.com/jamesonstone/rungrid/internal/warp"
+	"github.com/jamesonstone/rungrid/internal/workspace"
 )
 
 type Result struct {
@@ -24,6 +25,11 @@ func Run(loaded *manifest.Loaded, stateOverride, generatorVersion string, checkO
 	layout, err := state.NewLayout(loaded.Manifest.Project.ID, stateOverride)
 	if err != nil {
 		return Result{}, err
+	}
+	if journal, exists, journalErr := workspace.ReadJournalIfPresent(layout); journalErr != nil {
+		return Result{}, journalErr
+	} else if exists && journal.TeardownRequired && journal.GenerationID != plan.GenerationID {
+		return Result{}, errs.New(errs.ExitConflict, "RG403", "a previous generation still requires lifecycle cleanup; run rungrid down")
 	}
 	if activeGeneration, active, err := state.RecordedRuntimeGeneration(layout); err != nil {
 		return Result{}, err

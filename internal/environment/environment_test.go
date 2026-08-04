@@ -63,6 +63,28 @@ func TestCommandProviderFailureRedactsOutput(t *testing.T) {
 	}
 }
 
+func TestResolveRejectsProviderSymlinkEscapeAtExecutionTime(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, ".env"), []byte("A=outside\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escaped")); err != nil {
+		t.Fatal(err)
+	}
+	service := &manifest.Service{
+		WorkingDirectory: ".",
+		Environment: manifest.Environment{Providers: []manifest.EnvironmentProvider{{
+			Type: "dotenv", Path: "escaped/.env", Timeout: manifest.Duration{Duration: time.Second},
+		}}},
+	}
+	_, _, err := Resolve(context.Background(), service, root)
+	if err == nil || !strings.Contains(err.Error(), "outside the workspace") {
+		t.Fatalf("expected execution-time provider boundary rejection, got %v", err)
+	}
+}
+
 func FuzzParseDotenvNeverAcceptsNULKey(f *testing.F) {
 	f.Add("A=value\n")
 	f.Add("export B='value'\n")

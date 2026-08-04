@@ -4,17 +4,22 @@
 
 - A Rungrid workspace is declared by a portable manifest, not by scripts owned
   by a particular consumer repository.
-- Process Compose is the single lifecycle authority. Every Rungrid view and
-  command must report or change that same runtime rather than infer a parallel
-  state.
+- Process Compose is the single authority for managed-service lifecycle. Every
+  Rungrid view and service command must report or change that same runtime
+  rather than infer a parallel service state.
 - Interactive terminal ownership and process supervision are separate: a tab
   may own the right to start and stop a service while Process Compose remains
   authoritative for its lifecycle and logs.
+- One-shot workspace prerequisites and teardown are Rungrid operations. Their
+  journal, not Process Compose, is authoritative for ordering and recovery.
 
 ## CONSTRAINTS
 
 - Manifest and output contracts use `rungrid/v1` and `rungrid/output/v1`.
 - Project identity must not encode or hash an absolute developer path.
+- The manifest directory and workspace root are distinct. The portable root is
+  relative to the manifest, while resolved paths are machine-local and must
+  remain inside the symlink-aware workspace boundary.
 - Subprocesses use argument vectors. User commands, environment values, and
   paths must not be interpolated into shell command strings.
 - Secrets resolve only at execution time and must be redacted from errors,
@@ -23,9 +28,22 @@
 - Runtime state is project-scoped, private, atomic, and fail-closed. PID,
   process-start, socket, generation, owner, and content-hash checks protect
   every mutation boundary they identify.
+- A project-scoped lock serializes global lifecycle mutation. Once startup may
+  have changed external state, its journal retains teardown intent until every
+  required cleanup command succeeds, even when the runtime record is missing.
+- Global lifecycle hooks are exact, sequential argument vectors. They are not
+  managed services or terminal tabs and never run for individual service
+  `start` or `stop` commands.
 - Generated terminal files may be replaced or removed only when their ownership
   marker and last recorded content hash match.
 - Headless operation must not require or generate graphical terminal state.
+- Coding-agent instructions are read-only guidance. They must not inspect or
+  execute supplied project paths, replace the manifest as configuration
+  authority, or override a consumer repository's rules and user authorization.
+- Human help output may add color and terminal-only decoration only when the
+  output is interactive and color is not disabled. Color must never carry
+  meaning; redirected and explicitly colorless help remains complete and
+  stable.
 
 ### Kit-Managed Baseline Rules
 
@@ -37,9 +55,10 @@
 - Before implementation, inspect code and repository memory; create or adopt `SPEC.md` when material rationale exists.
 - After validation, curate feature rationale, project invariants, reusable practices, and domain knowledge into their scope-appropriate canonical documents.
 - Allow a justified `not required` repository-memory decision when code and tests preserve the complete durable truth.
-- Prefer implementation/source code files around 300 lines or less when splitting improves clarity and ownership.
-- Do not apply the code-file size guideline to documentation files, all `docs/**`, all `.kit/**`, or `.kit.yaml`.
-- Do not split or rewrite docs, generated state, or Kit config artifacts solely because they exceed 300 lines.
+- Keep every version-control-eligible handwritten implementation/source and test file at 300 physical lines or less.
+- Before delivery, audit the complete affected source/test scope; whole-project reconcile and scheduled maintenance audit the entire repository.
+- Exclude documentation files, all `docs/**`, all `.kit/**`, `.kit.yaml`, ignored files, vendored dependencies, and proven generated files.
+- Split oversized files by semantic responsibility while preserving stable public entry points and behavior; never use minification or arbitrary numbered chunks to claim compliance.
 <!-- END KIT-MANAGED BASELINE RULES -->
 
 ## CHANGE CLASSIFICATION
@@ -81,6 +100,12 @@
   mutation.
 - **Generation:** an immutable, content-addressed set of derived runtime and
   terminal artifacts for a validated manifest.
+- **Workspace root:** the relative manifest declaration whose resolved,
+  symlink-aware directory bounds all workspace-owned execution paths.
+- **Lifecycle command:** an ordered one-shot prerequisite or teardown command
+  owned by Rungrid rather than Process Compose.
+- **Lifecycle journal:** the crash-safe project record that proves the active
+  generation, completed prerequisites, teardown obligation, and cleanup result.
 - **Overview:** the read-only remote Process Compose TUI and its selectable
   service logs.
 - **Versions:** the live service, listener, Git branch, commit, and worktree

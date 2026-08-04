@@ -24,7 +24,7 @@ func TestTemplatesAreOverviewVersionsThenManifestOrderedTabs(t *testing.T) {
 		if !strings.HasSuffix(templates[index].TabName, suffix) {
 			t.Errorf("template %d name %q does not end in %q", index, templates[index].TabName, suffix)
 		}
-		if strings.Contains(string(templates[index].Content), loaded.Root) {
+		if strings.Contains(string(templates[index].Content), loaded.WorkspaceRoot) {
 			t.Errorf("template %d persists an absolute workspace path", index)
 		}
 	}

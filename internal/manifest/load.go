@@ -14,12 +14,13 @@ import (
 )
 
 type Loaded struct {
-	Manifest    Manifest
-	Root        string
-	ConfigPath  string
-	LocalPath   string
-	SourceFiles []string
-	MergedYAML  []byte
+	Manifest      Manifest
+	ManifestDir   string
+	WorkspaceRoot string
+	ConfigPath    string
+	LocalPath     string
+	SourceFiles   []string
+	MergedYAML    []byte
 }
 
 func LoadGenerated(filename, root string) (*Manifest, error) {
@@ -74,20 +75,24 @@ func Load(configPath, localPath string) (*Loaded, error) {
 		return nil, errs.Wrap(errs.ExitUsage, "RG101", "resolve manifest path", err)
 	}
 	absConfig = filepath.Clean(absConfig)
-	root := filepath.Dir(absConfig)
-	resolvedRoot, err := resolveExisting(root)
+	resolvedConfig, err := resolveExisting(absConfig)
 	if err != nil {
-		return nil, errs.Wrap(errs.ExitUsage, "RG102", "resolve workspace root", err)
+		return nil, errs.Wrap(errs.ExitUsage, "RG102", "resolve manifest", err)
+	}
+	manifestDir := filepath.Dir(resolvedConfig)
+	resolvedRoot, err := resolveDeclaredWorkspaceRoot(resolvedConfig)
+	if err != nil {
+		return nil, err
 	}
 	files := make([]string, 0, 4)
-	merged, err := loadMap(absConfig, resolvedRoot, map[string]bool{}, &files)
+	merged, err := loadMap(resolvedConfig, resolvedRoot, map[string]bool{}, &files, true)
 	if err != nil {
 		return nil, err
 	}
 
 	absLocal := ""
 	if localPath == "" {
-		absLocal = filepath.Join(root, ".rungrid.local.yaml")
+		absLocal = filepath.Join(manifestDir, ".rungrid.local.yaml")
 	} else {
 		absLocal, err = filepath.Abs(localPath)
 		if err != nil {
@@ -95,10 +100,18 @@ func Load(configPath, localPath string) (*Loaded, error) {
 		}
 	}
 	if _, statErr := os.Stat(absLocal); statErr == nil {
-		localMap, loadErr := loadMap(absLocal, resolvedRoot, map[string]bool{}, &files)
+		resolvedLocal, resolveErr := resolveExisting(absLocal)
+		if resolveErr != nil {
+			return nil, errs.Wrap(errs.ExitUsage, "RG131", "resolve local overlay", resolveErr)
+		}
+		if filepath.Dir(resolvedLocal) != manifestDir {
+			return nil, errs.New(errs.ExitUsage, "RG129", "local overlay must be adjacent to the manifest")
+		}
+		localMap, loadErr := loadMap(resolvedLocal, resolvedRoot, map[string]bool{}, &files, false)
 		if loadErr != nil {
 			return nil, loadErr
 		}
+		absLocal = resolvedLocal
 		merged = mergeMap(merged, localMap, "")
 	} else if !errors.Is(statErr, fs.ErrNotExist) {
 		return nil, errs.Wrap(errs.ExitUsage, "RG104", "inspect local overlay", statErr)
@@ -125,16 +138,23 @@ func Load(configPath, localPath string) (*Loaded, error) {
 		return nil, errs.Wrap(errs.ExitFailure, "RG108", "encode normalized manifest", err)
 	}
 	return &Loaded{
-		Manifest:    result,
-		Root:        resolvedRoot,
-		ConfigPath:  absConfig,
-		LocalPath:   absLocal,
-		SourceFiles: files,
-		MergedYAML:  canonical,
+		Manifest:      result,
+		ManifestDir:   manifestDir,
+		WorkspaceRoot: resolvedRoot,
+		ConfigPath:    resolvedConfig,
+		LocalPath:     absLocal,
+		SourceFiles:   files,
+		MergedYAML:    canonical,
 	}, nil
 }
 
-func loadMap(filename, root string, stack map[string]bool, files *[]string) (map[string]any, error) {
+func loadMap(
+	filename string,
+	root string,
+	stack map[string]bool,
+	files *[]string,
+	allowWorkspaceRoot bool,
+) (map[string]any, error) {
 	resolved, err := resolveExisting(filename)
 	if err != nil {
 		return nil, errs.Wrap(errs.ExitUsage, "RG109", "read manifest", err)
@@ -159,6 +179,9 @@ func loadMap(filename, root string, stack map[string]bool, files *[]string) (map
 	if current == nil {
 		return nil, errs.New(errs.ExitUsage, "RG114", "manifest must be a YAML mapping")
 	}
+	if !allowWorkspaceRoot && definesWorkspaceRoot(current) {
+		return nil, errs.New(errs.ExitUsage, "RG122", fmt.Sprintf("workspace.root may only be declared in the source manifest: %s", filename))
+	}
 	*files = append(*files, resolved)
 
 	result := map[string]any{}
@@ -172,7 +195,7 @@ func loadMap(filename, root string, stack map[string]bool, files *[]string) (map
 			if !ok || strings.TrimSpace(name) == "" {
 				return nil, errs.New(errs.ExitUsage, "RG116", "each import must be a non-empty path")
 			}
-			imported, importErr := loadMap(filepath.Join(filepath.Dir(resolved), name), root, stack, files)
+			imported, importErr := loadMap(filepath.Join(filepath.Dir(resolved), name), root, stack, files, false)
 			if importErr != nil {
 				return nil, importErr
 			}

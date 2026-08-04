@@ -41,6 +41,21 @@ rungrid doctor
 rungrid up
 ```
 
+To hand workspace wiring to a coding agent, generate a self-contained brief
+before or after initialization:
+
+```sh
+rungrid instructions . ../api ../web
+# Exact alias:
+rungrid agent-start . ../api ../web
+```
+
+The brief tells the agent how to inspect each repository, preserve its rules,
+choose a portable common workspace root, model shared infrastructure and
+tab-owned applications, validate the result, and keep `.rungrid.yaml` as the
+single service inventory. Supplied paths are printed as data and are never
+executed. The command does not require a manifest or mutate workspace state.
+
 Headless operation uses the same lifecycle:
 
 ```sh
@@ -63,19 +78,34 @@ project:
   name: Example Workspace
   slug: example-workspace
   id: example-workspace-k7m4q2
+workspace:
+  root: ..
 terminal:
   mode: warp
+lifecycle:
+  before_up:
+    - name: prepare-database
+      working_directory: control
+      timeout: 2m
+      run:
+        argv: [docker, compose, up, --detach, --wait, database]
+  after_down:
+    - name: remove-infrastructure
+      working_directory: control
+      timeout: 2m
+      run:
+        argv: [docker, compose, down, --remove-orphans]
 services:
   - name: database
-    source: compose
+    source: external
     activation: workspace
-    compose:
-      file: compose.yaml
-      service: database
+    external:
+      command:
+        argv: [database-ready, --quiet]
   - name: api
     source: native
     activation: tab
-    working_directory: services/api
+    working_directory: api
     run:
       argv: [go, run, ./cmd/server]
     terminal:
@@ -84,9 +114,13 @@ services:
       database: running
 ```
 
-Workspace-owned services start during `up`. Tab-owned services remain disabled
-in Process Compose until an exclusive `rungrid session` owns them. External
-services are readiness dependencies only and are never started or stopped.
+`workspace.root` is relative to the manifest directory and may include sibling
+repositories. One-shot lifecycle commands run in order around the supervised
+workspace and remain recoverable after a failed startup or cleanup. Workspace-
+owned services start during `up`; tab-owned services remain disabled in Process
+Compose until an exclusive `rungrid session` owns them. External services are
+readiness dependencies only and are never directly started or stopped by
+service commands.
 
 The complete product and safety contract is [CLI_SPEC.md](CLI_SPEC.md). Durable
 implementation rationale lives in
@@ -96,8 +130,13 @@ implementation rationale lives in
 
 Rungrid v1 provides `init`, `doctor`, `plan`, `generate`, `up`, `open`,
 `attach`, `versions`, `status`, `logs`, `session`, `start`, `stop`, `down`,
-`uninstall`, `config`, `completion`, and `version`. Every JSON-capable command
-uses a `rungrid/output/v1` envelope.
+`uninstall`, `config`, `instructions` (alias `agent-start`), `completion`, and
+`version`. Every JSON-capable command uses a `rungrid/output/v1` envelope.
+
+`rungrid --help` and `rungrid help` present the workspace lifecycle, service
+ownership model, and commands grouped by workflow. Interactive terminals use
+the Rungrid color palette; redirected output is stable plain text. Use
+`--no-color` or set `NO_COLOR` to suppress ANSI styling explicitly.
 
 Generated files, runtime identity, locks, logs, and terminal ownership live in
 project-scoped XDG state. Rungrid verifies ownership hashes, PID start identity,
@@ -119,7 +158,8 @@ make release-snapshot
 `/usr/local/bin/rungrid`, matching the local command convention. Override
 `PREFIX` to use another prefix, for example `make build PREFIX="$HOME/.local"`.
 The link step requests administrator privileges only when the destination is
-not writable and refuses to replace a regular file. `make run ARGS="..."`
+not writable, refuses to replace a regular file, and fails unless the final
+symlink targets the just-built repository binary. `make run ARGS="..."`
 executes the repository binary, and `make install` installs it with the active
 Go toolchain. `make check` checks formatting, vets, runs unit/race and
 dependency-license tests, verifies the specification sanitization contract,

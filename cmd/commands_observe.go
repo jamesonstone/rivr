@@ -10,6 +10,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/errs"
 	"github.com/jamesonstone/rungrid/internal/lifecycle"
 	"github.com/jamesonstone/rungrid/internal/output"
+	"github.com/jamesonstone/rungrid/internal/state"
 	"github.com/jamesonstone/rungrid/internal/supervisor"
 	"github.com/jamesonstone/rungrid/internal/versions"
 	"github.com/spf13/cobra"
@@ -121,11 +122,19 @@ func newStatusCommand(opt *options) *cobra.Command {
 		Short: "Report active runtime and service state",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
-			active, err := opt.active(command.Context())
+			projectID := opt.projectID
+			if projectID == "" {
+				loaded, err := opt.load()
+				if err != nil {
+					return err
+				}
+				projectID = loaded.Manifest.Project.ID
+			}
+			layout, err := state.NewLayout(projectID, opt.stateDir)
 			if err != nil {
 				return err
 			}
-			states, _, err := lifecycle.Status(command.Context(), active)
+			workspaceStatus, err := lifecycle.InspectStatus(command.Context(), layout)
 			if err != nil {
 				return err
 			}
@@ -134,21 +143,48 @@ func newStatusCommand(opt *options) *cobra.Command {
 				for _, name := range args {
 					wanted[name] = true
 				}
-				filtered := states[:0]
-				for _, item := range states {
+				filtered := workspaceStatus.Services[:0]
+				for _, item := range workspaceStatus.Services {
 					if wanted[item.Name] {
 						filtered = append(filtered, item)
 					}
 				}
-				states = filtered
+				workspaceStatus.Services = filtered
 			}
-			data := map[string]any{"generation": active.Runtime.GenerationID, "pid": active.Runtime.PID, "socket": active.Runtime.Socket, "services": states}
 			if opt.json {
-				return output.WriteJSON(command.OutOrStdout(), "Status", active.Layout.ProjectID, data, nil)
+				return output.WriteJSON(command.OutOrStdout(), "Status", layout.ProjectID, workspaceStatus, nil)
 			}
 			if !opt.quiet {
-				_, _ = fmt.Fprintf(command.OutOrStdout(), "runtime PID %d  generation %s\n", active.Runtime.PID, active.Runtime.GenerationID)
-				for _, item := range states {
+				_, _ = fmt.Fprintf(command.OutOrStdout(), "runtime %s", workspaceStatus.Runtime)
+				if workspaceStatus.PID != 0 {
+					_, _ = fmt.Fprintf(command.OutOrStdout(), "  PID %d", workspaceStatus.PID)
+				}
+				if workspaceStatus.Generation != "" {
+					_, _ = fmt.Fprintf(command.OutOrStdout(), "  generation %s", workspaceStatus.Generation)
+				}
+				_, _ = fmt.Fprintln(command.OutOrStdout())
+				if workspaceStatus.Lifecycle != nil {
+					_, _ = fmt.Fprintf(
+						command.OutOrStdout(),
+						"lifecycle %s  teardown-required=%t  completed-before-up=%d\n",
+						workspaceStatus.Lifecycle.State,
+						workspaceStatus.Lifecycle.TeardownRequired,
+						len(workspaceStatus.Lifecycle.CompletedBefore),
+					)
+					if workspaceStatus.Lifecycle.CleanupFailure != "" {
+						_, _ = fmt.Fprintf(command.OutOrStdout(), "cleanup failure: %s\n", workspaceStatus.Lifecycle.CleanupFailure)
+					}
+					if workspaceStatus.Lifecycle.LastFailure != nil {
+						_, _ = fmt.Fprintf(
+							command.OutOrStdout(),
+							"last failed command: %s/%s (%s)\n",
+							workspaceStatus.Lifecycle.LastFailure.Phase,
+							workspaceStatus.Lifecycle.LastFailure.Name,
+							workspaceStatus.Lifecycle.LastFailure.Status,
+						)
+					}
+				}
+				for _, item := range workspaceStatus.Services {
 					_, _ = fmt.Fprintf(command.OutOrStdout(), "%-20s %-10s %-9s %-14s pid=%d health=%s session=%t tab=%t\n", item.Name, item.Source, item.Activation, item.Status, item.PID, item.Health, item.SessionOwned, item.TabRegistered)
 				}
 			}

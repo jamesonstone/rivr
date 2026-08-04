@@ -63,7 +63,7 @@ EOF
 }
 
 trap 'finish 130; exit 130' HUP INT TERM
-if (cd "$repository_root" && RUNGRID_E2E=1 go test -run TestHeadlessLifecycleEndToEnd -count=1 -v ./tests/end-to-end/local) >"$output_path" 2>&1; then
+if (cd "$repository_root" && RUNGRID_E2E=1 go test -run 'Test(Headless|TabOnly)LifecycleEndToEnd' -count=1 -v ./tests/end-to-end/local) >"$output_path" 2>&1; then
 	cat "$output_path"
 	finish 0
 	exit 0
