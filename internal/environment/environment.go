@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,9 +14,8 @@ import (
 
 	"github.com/jamesonstone/rungrid/internal/errs"
 	"github.com/jamesonstone/rungrid/internal/manifest"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
-
-const maxProviderOutput = 4 << 20
 
 func Resolve(ctx context.Context, service *manifest.Service, root string) ([]string, map[string]string, error) {
 	workingDirectory := filepath.Join(root, service.WorkingDirectory)
@@ -110,7 +108,7 @@ func pathWithin(root, candidate string) bool {
 func parseDotenv(content []byte) (map[string]string, error) {
 	result := map[string]string{}
 	scanner := bufio.NewScanner(bytes.NewReader(content))
-	scanner.Buffer(make([]byte, 1024), maxProviderOutput)
+	scanner.Buffer(make([]byte, 1024), subprocess.DefaultLimit)
 	for lineNumber := 1; scanner.Scan(); lineNumber++ {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -145,14 +143,11 @@ func runCommandProvider(ctx context.Context, argv []string, directory string, en
 	command := exec.CommandContext(ctx, path, argv[1:]...)
 	command.Dir = directory
 	command.Env = flatten(environment)
-	var stdout limitedBuffer
-	var stderr limitedBuffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	if err := command.Run(); err != nil {
+	result, err := subprocess.Run(command)
+	if err != nil {
 		return nil, errs.Wrap(errs.ExitDependency, "RG507", "environment command provider failed (output redacted)", err)
 	}
-	return parseDotenv(stdout.Bytes())
+	return parseDotenv(result.Stdout)
 }
 
 func runDirenv(ctx context.Context, directory string, environment map[string]string) (map[string]string, error) {
@@ -163,14 +158,12 @@ func runDirenv(ctx context.Context, directory string, environment map[string]str
 	command := exec.CommandContext(ctx, path, "export", "json")
 	command.Dir = directory
 	command.Env = flatten(environment)
-	var stdout limitedBuffer
-	command.Stdout = &stdout
-	command.Stderr = io.Discard
-	if err := command.Run(); err != nil {
+	result, err := subprocess.Run(command)
+	if err != nil {
 		return nil, errs.Wrap(errs.ExitDependency, "RG509", "direnv provider failed (output redacted)", err)
 	}
 	var values map[string]string
-	if err := json.Unmarshal(stdout.Bytes(), &values); err != nil {
+	if err := json.Unmarshal(result.Stdout, &values); err != nil {
 		return nil, errs.Wrap(errs.ExitDependency, "RG510", "decode direnv provider output", err)
 	}
 	return values, nil
@@ -250,18 +243,4 @@ func executable(filename string) (string, error) {
 		return "", fmt.Errorf("not executable")
 	}
 	return filepath.Clean(filename), nil
-}
-
-type limitedBuffer struct{ bytes.Buffer }
-
-func (b *limitedBuffer) Write(content []byte) (int, error) {
-	remaining := maxProviderOutput - b.Len()
-	if remaining <= 0 {
-		return 0, fmt.Errorf("provider output exceeds %d bytes", maxProviderOutput)
-	}
-	if len(content) > remaining {
-		_, _ = b.Buffer.Write(content[:remaining])
-		return remaining, fmt.Errorf("provider output exceeds %d bytes", maxProviderOutput)
-	}
-	return b.Buffer.Write(content)
 }

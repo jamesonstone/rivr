@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 func TestHeadlessLifecycleEndToEnd(t *testing.T) {
@@ -67,7 +69,7 @@ runtime:
 	run := func(arguments ...string) []byte {
 		t.Helper()
 		command := exec.Command(binary, append(baseArguments, arguments...)...)
-		output, err := command.CombinedOutput()
+		output, err := subprocess.Combined(command)
 		if err != nil {
 			t.Fatalf("rungrid %s: %v\n%s", strings.Join(arguments, " "), err, output)
 		}
@@ -104,7 +106,7 @@ runtime:
 	if err := os.WriteFile(runtimePath, append(tamperedContent, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command(binary, append(baseArguments, "status")...).CombinedOutput(); err == nil || !strings.Contains(string(output), "runtime PID") {
+	if output, err := subprocess.Combined(exec.Command(binary, append(baseArguments, "status")...)); err == nil || !strings.Contains(string(output), "runtime PID") {
 		t.Fatalf("tampered runtime PID was not rejected: err=%v output=%s", err, output)
 	}
 	if err := os.WriteFile(runtimePath, runtimeRecord, 0o600); err != nil {
@@ -115,7 +117,7 @@ runtime:
 		t.Fatal(err)
 	}
 	changedArguments := []string{"--config", config, "--local", overlay, "--state-dir", stateDirectory, "generate"}
-	if output, err := exec.Command(binary, changedArguments...).CombinedOutput(); err == nil || !strings.Contains(string(output), "requires lifecycle cleanup") {
+	if output, err := subprocess.Combined(exec.Command(binary, changedArguments...)); err == nil || !strings.Contains(string(output), "requires lifecycle cleanup") {
 		t.Fatalf("active-generation guard did not fail closed: err=%v output=%s", err, output)
 	}
 	if err := os.Remove(overlay); err != nil {
@@ -131,7 +133,7 @@ runtime:
 	}
 	waitForE2EState(t, binary, baseArguments, "worker", "Running")
 	duplicate := exec.Command(binary, append(baseArguments, "session", "worker")...)
-	if output, err := duplicate.CombinedOutput(); err == nil || !strings.Contains(string(output), "already has an owning session") {
+	if output, err := subprocess.Combined(duplicate); err == nil || !strings.Contains(string(output), "already has an owning session") {
 		t.Fatalf("duplicate session was not rejected: err=%v output=%s", err, output)
 	}
 	if err := session.Process.Signal(os.Interrupt); err != nil {
@@ -207,7 +209,7 @@ services:
 	arguments := []string{"--config", config, "--state-dir", stateDirectory}
 	for _, action := range [][]string{{"up", "--no-open"}, {"status"}, {"down"}} {
 		command := exec.Command(binary, append(arguments, action...)...)
-		if output, err := command.CombinedOutput(); err != nil {
+		if output, err := subprocess.Combined(command); err != nil {
 			t.Fatalf("rungrid %s: %v\n%s", strings.Join(action, " "), err, output)
 		}
 	}
@@ -220,7 +222,7 @@ func buildRungrid(t *testing.T, directory string) (string, string) {
 	repositoryRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	build := exec.Command("go", "build", "-o", binary, ".")
 	build.Dir = repositoryRoot
-	if output, err := build.CombinedOutput(); err != nil {
+	if output, err := subprocess.Combined(build); err != nil {
 		t.Fatalf("build Rungrid: %v\n%s", err, output)
 	}
 	return binary, repositoryRoot
@@ -243,7 +245,7 @@ func waitForE2EState(t *testing.T, binary string, baseArguments []string, servic
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		command := exec.Command(binary, append(baseArguments, "--json", "status", service)...)
-		output, err := command.Output()
+		capture, err := subprocess.Run(command)
 		if err == nil {
 			var envelope struct {
 				Data struct {
@@ -252,7 +254,7 @@ func waitForE2EState(t *testing.T, binary string, baseArguments []string, servic
 					} `json:"services"`
 				} `json:"data"`
 			}
-			if json.Unmarshal(output, &envelope) == nil && len(envelope.Data.Services) == 1 && envelope.Data.Services[0].Status == expected {
+			if json.Unmarshal(capture.Stdout, &envelope) == nil && len(envelope.Data.Services) == 1 && envelope.Data.Services[0].Status == expected {
 				return
 			}
 		}

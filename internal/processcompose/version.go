@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 func Version(ctx context.Context, executable string) (string, error) {
 	versionContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(versionContext, executable, "version").CombinedOutput()
+	output, err := subprocess.Combined(exec.CommandContext(versionContext, executable, "version"))
 	if err != nil {
 		return "", errs.Wrap(errs.ExitDependency, "RG306", "read Process Compose version", err)
 	}

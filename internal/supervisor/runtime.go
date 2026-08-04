@@ -14,6 +14,7 @@ import (
 	"github.com/jamesonstone/rungrid/internal/errs"
 	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/state"
+	"github.com/jamesonstone/rungrid/internal/subprocess"
 )
 
 type Runtime struct {
@@ -80,7 +81,7 @@ func Start(ctx context.Context, options StartOptions) (result Runtime, reused bo
 	command := exec.CommandContext(ctx, options.ProcessCompose, arguments...)
 	command.Dir = generationDirectory
 	command.Env = processcompose.EnvironmentWithRuntime(os.Environ(), options.RungridExecutable, options.Layout.StateRoot, options.WorkspaceRoot, options.GenerationID)
-	output, err := command.CombinedOutput()
+	output, err := subprocess.Combined(command)
 	if err != nil {
 		message := "start detached Process Compose runtime"
 		if len(strings.TrimSpace(string(output))) > 0 {

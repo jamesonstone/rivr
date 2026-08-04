@@ -59,6 +59,7 @@ jobs:
 
   end-to-end:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       PROCESS_COMPOSE_VERSION: v1.120.0
       PROCESS_COMPOSE_ARCHIVE_SHA256: 3792e1ed9f383832eb2362154444e8564fbc8e7e8e7cff8754c68aea5eca086e
