@@ -42,6 +42,20 @@ func Run(ctx context.Context, loaded *manifest.Loaded, stateOverride string, fix
 		Summary: "relative workspace root is valid and contains the manifest directory",
 		Detail:  loaded.Manifest.Workspace.Root,
 	})
+	for _, name := range manifest.DeclaredRepositoryNames(&loaded.Manifest) {
+		repositoryRoot, repositoryErr := manifest.RepositoryRoot(&loaded.Manifest, loaded.WorkspaceRoot, name)
+		if repositoryErr != nil {
+			add(Check{Name: "repository:" + name, Status: "error", Summary: "declared repository root is unavailable", Detail: repositoryErr.Error()})
+			continue
+		}
+		add(Check{Name: "repository:" + name, Status: "ok", Summary: "declared repository root is valid", Detail: loaded.Manifest.Repositories[name].Path})
+		gitCommand := exec.CommandContext(ctx, "git", "-C", repositoryRoot, "rev-parse", "--show-toplevel")
+		if err := gitCommand.Run(); err != nil {
+			add(Check{Name: "repository-git:" + name, Status: "warning", Summary: "source-control state is unavailable"})
+		} else {
+			add(Check{Name: "repository-git:" + name, Status: "ok", Summary: "source-control state is available"})
+		}
+	}
 
 	pc := loaded.Manifest.Runtime.ProcessCompose.Executable
 	if resolved, err := exec.LookPath(pc); err != nil {

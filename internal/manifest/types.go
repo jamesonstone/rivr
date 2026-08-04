@@ -32,15 +32,16 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 }
 
 type Manifest struct {
-	APIVersion string    `yaml:"api_version" json:"api_version"`
-	Kind       string    `yaml:"kind" json:"kind"`
-	Project    Project   `yaml:"project" json:"project"`
-	Workspace  Workspace `yaml:"workspace,omitempty" json:"workspace"`
-	Imports    []string  `yaml:"imports,omitempty" json:"imports,omitempty"`
-	Runtime    Runtime   `yaml:"runtime,omitempty" json:"runtime"`
-	Terminal   Terminal  `yaml:"terminal,omitempty" json:"terminal"`
-	Lifecycle  Lifecycle `yaml:"lifecycle,omitempty" json:"lifecycle"`
-	Services   []Service `yaml:"services" json:"services"`
+	APIVersion   string                `yaml:"api_version" json:"api_version"`
+	Kind         string                `yaml:"kind" json:"kind"`
+	Project      Project               `yaml:"project" json:"project"`
+	Workspace    Workspace             `yaml:"workspace,omitempty" json:"workspace"`
+	Repositories map[string]Repository `yaml:"repositories,omitempty" json:"repositories,omitempty"`
+	Imports      []string              `yaml:"imports,omitempty" json:"imports,omitempty"`
+	Runtime      Runtime               `yaml:"runtime,omitempty" json:"runtime"`
+	Terminal     Terminal              `yaml:"terminal,omitempty" json:"terminal"`
+	Lifecycle    Lifecycle             `yaml:"lifecycle,omitempty" json:"lifecycle"`
+	Services     []Service             `yaml:"services" json:"services"`
 }
 
 type Project struct {
@@ -51,6 +52,10 @@ type Project struct {
 
 type Workspace struct {
 	Root string `yaml:"root,omitempty" json:"root"`
+}
+
+type Repository struct {
+	Path string `yaml:"path" json:"path"`
 }
 
 type Lifecycle struct {
@@ -86,6 +91,7 @@ type Terminal struct {
 
 type Service struct {
 	Name             string            `yaml:"name" json:"name"`
+	Repository       string            `yaml:"repository,omitempty" json:"repository"`
 	Source           string            `yaml:"source" json:"source"`
 	Activation       string            `yaml:"activation,omitempty" json:"activation"`
 	WorkingDirectory string            `yaml:"working_directory,omitempty" json:"working_directory"`
@@ -193,6 +199,9 @@ func (m *Manifest) ApplyDefaults() {
 	applyLifecycleDefaults(m.Lifecycle.AfterDown, m.Runtime.ShutdownTimeout.Duration)
 	for i := range m.Services {
 		s := &m.Services[i]
+		if s.Repository == "" {
+			s.Repository = WorkspaceRepository
+		}
 		if s.Activation == "" {
 			if s.Source == "external" {
 				s.Activation = "workspace"

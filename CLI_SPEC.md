@@ -113,6 +113,8 @@ project:
 workspace:
   root: .
 
+repositories: {}
+
 imports: []
 
 runtime:
@@ -133,8 +135,8 @@ services: []
 ```
 
 Allowed top-level fields are exactly `api_version`, `kind`, `project`,
-`workspace`, `imports`, `runtime`, `terminal`, `lifecycle`, and `services`.
-Unknown fields are errors.
+`workspace`, `repositories`, `imports`, `runtime`, `terminal`, `lifecycle`,
+and `services`. Unknown fields are errors.
 
 ### 5.2 Project
 
@@ -175,7 +177,32 @@ The relative declaration participates in deterministic generation. The
 resolved absolute root exists only in machine-local runtime state and never
 contributes to project identity.
 
-### 5.4 Lifecycle
+### 5.4 Repository roots
+
+```yaml
+repositories:
+  api:
+    path: services/api
+  web:
+    path: services/web
+```
+
+`repositories` is an optional map of stable logical names to directories
+relative to `workspace.root`. Names match `[a-z][a-z0-9-]*`. Paths must be
+relative, existing, distinct directories within the symlink-resolved workspace
+boundary.
+
+The reserved implicit repository name `workspace` always identifies
+`workspace.root` and may not be redefined. A local overlay may replace a
+declared repository path for a different checkout layout. Imports merge
+repository maps recursively but cannot expand the outer workspace boundary.
+
+Repository declarations are portable input. Plans, generation hashes, and
+normalized manifests retain their logical names and relative paths. Absolute
+resolved repository paths are machine-local runtime values and never project
+identity material.
+
+### 5.5 Lifecycle
 
 ```yaml
 lifecycle:
@@ -218,7 +245,7 @@ The phase fields are `lifecycle.before_up` and `lifecycle.after_down`.
 `allow_failure` is not part of v1. A local overlay replaces an entire
 `before_up` or `after_down` sequence rather than merging list elements.
 
-### 5.5 Runtime
+### 5.6 Runtime
 
 ```yaml
 runtime:
@@ -234,7 +261,7 @@ Durations use Go duration syntax. Executable values are names resolved through
 the current execution environment unless an operator-local override supplies a
 path. Required Process Compose compatibility is always enforced.
 
-### 5.6 Terminal
+### 5.7 Terminal
 
 ```yaml
 terminal:
@@ -247,7 +274,7 @@ terminal:
 headless mode. Terminal generation is skipped in headless mode. Themes are
 advisory and may be omitted when the terminal does not expose a stable value.
 
-### 5.7 Services
+### 5.8 Services
 
 Service order is significant. It determines stable plan order and service-tab
 order.
@@ -268,9 +295,10 @@ services:
       retries: 30
 
   - name: api
+    repository: api
     source: native
     activation: tab
-    working_directory: services/api
+    working_directory: .
     run:
       argv: [go, run, ./cmd/server]
     terminal:
@@ -288,9 +316,10 @@ services:
           optional: true
 
   - name: web
+    repository: web
     source: native
     activation: tab
-    working_directory: services/web
+    working_directory: .
     run:
       argv: [npm, run, dev]
     terminal:
@@ -307,9 +336,10 @@ services:
 Each service supports:
 
 - `name`: required stable identifier matching `[a-z][a-z0-9-]*`;
+- `repository`: declared logical repository name, defaulting to `workspace`;
 - `source`: `native`, `compose`, or `external`;
 - `activation`: `workspace` or `tab`;
-- `working_directory`: workspace-relative directory;
+- `working_directory`: directory relative to the selected repository;
 - exactly one source block appropriate to `source`;
 - `environment` providers and literal non-secret values;
 - `depends_on` lifecycle requirements;
@@ -323,7 +353,7 @@ Each service supports:
 Service names are unique. A dependency must name another service. Dependency
 cycles are rejected.
 
-### 5.8 Native source
+### 5.9 Native source
 
 ```yaml
 source: native
@@ -335,7 +365,7 @@ run:
 `run.argv` is a non-empty argument vector. It is never evaluated by a shell.
 `stdin` defaults to false because Process Compose owns the service process.
 
-### 5.9 Compose source
+### 5.10 Compose source
 
 ```yaml
 source: compose
@@ -357,7 +387,7 @@ exact expanded shutdown vector in generation state and reuses it during
 Multiple services may reference one Compose project. Shutdown deduplicates
 project-level actions while preserving service-specific stop semantics.
 
-### 5.10 External source
+### 5.11 External source
 
 ```yaml
 source: external
@@ -370,7 +400,7 @@ external:
 External services are readiness dependencies only. Rungrid never starts,
 stops, restarts, or uninstalls them.
 
-### 5.11 Activation
+### 5.12 Activation
 
 `workspace` services start as part of `rungrid up`. Their Process Compose
 entries are enabled unless their source is external.
@@ -382,7 +412,7 @@ operators use `rungrid session <service>` for the same semantics.
 External services must use workspace activation because no tab can own their
 lifecycle.
 
-### 5.12 Terminal service metadata
+### 5.13 Terminal service metadata
 
 ```yaml
 terminal:
@@ -400,7 +430,7 @@ Invocations of the same executable with different arguments pass through to
 the user's normal command. Shell aliases do not change stored trigger
 semantics.
 
-### 5.13 Environment
+### 5.14 Environment
 
 ```yaml
 environment:
@@ -426,7 +456,7 @@ generated Process Compose files contain provider references or runtime wrapper
 commands, never resolved secret values. Diagnostics redact values for keys
 matching secret-like names and values explicitly marked sensitive.
 
-### 5.14 Dependencies
+### 5.15 Dependencies
 
 ```yaml
 depends_on:
@@ -439,7 +469,7 @@ Rungrid validates the graph and compiles supported requirements into Process
 Compose dependencies. External health dependencies are checked by a generated
 wrapper.
 
-### 5.15 Health checks
+### 5.16 Health checks
 
 ```yaml
 health:
@@ -455,7 +485,7 @@ Health commands use argument vectors and inherit the service's resolved
 execution environment. A health failure is observable in status and Overview
 and participates in startup timeout behavior.
 
-### 5.16 Restart policy
+### 5.17 Restart policy
 
 ```yaml
 restart:
@@ -541,9 +571,10 @@ fails closed and identifies the conflicting path.
 
 `rungrid plan` performs no lifecycle or terminal mutation. It loads imports and
 the local overlay, validates the final manifest, computes the generation hash,
-and prints the manifest directory, relative workspace root, ordered lifecycle
-commands, timeouts, teardown semantics, and service actions. Secret values are
-never resolved and no absolute developer path appears in deterministic output.
+and prints the manifest directory, relative workspace root, declared logical
+repository roots, ordered lifecycle commands, timeouts, teardown semantics,
+and service actions. Secret values are never resolved and no absolute developer
+path appears in deterministic output.
 
 `rungrid generate` materializes a complete generation in a temporary directory,
 validates every artifact, writes ownership metadata, and atomically promotes it.
@@ -720,7 +751,8 @@ It displays, for every included service:
 - lifecycle state and health;
 - PID when locally owned;
 - listening ports discovered from the process tree;
-- Git branch and short commit for the service working directory;
+- selected logical repository and Git branch and short commit for the service
+  working directory;
 - clean, dirty, or unavailable source-control state;
 - worktree identity when available.
 
@@ -802,7 +834,8 @@ rungrid init [--non-interactive] [--from-compose <file>] [--force]
 Interactive `init` uses a Bubble Tea flow that:
 
 - identifies the workspace root and generates project identity;
-- discovers Compose files and repository directories;
+- discovers Compose files and repository directories, assigning selected
+  sibling Git roots stable logical names;
 - infers candidate commands with confidence and evidence;
 - requires confirmation for inferred execution behavior;
 - configures source, activation, dependencies, health, environment, and
@@ -824,7 +857,8 @@ after explicit interactive confirmation.
 rungrid doctor [--fix]
 ```
 
-Doctor reports manifest validity, path boundaries, required executables,
+Doctor reports manifest validity, workspace and declared repository path
+boundaries, required executables,
 Process Compose compatibility, Warp/zsh availability when graphical mode is
 selected, lifecycle working directories and executables, state and journal
 permissions, stale runtime or cleanup-required evidence, port conflicts, and
@@ -1060,7 +1094,9 @@ Rungrid must:
   input;
 - resolve secrets only at execution time and redact diagnostics, plans, state,
   and evidence;
-- reject imports and working directories that escape the workspace;
+- reject imports and lifecycle working directories that escape the workspace;
+- reject repository roots that escape the workspace and service-owned paths
+  that escape their selected repository;
 - require a relative workspace root and prove the manifest directory remains
   inside its symlink-resolved boundary;
 - reject generated or uninstall paths that escape the selected project state;
@@ -1083,18 +1119,20 @@ A legacy managed-development workspace migrates by creating one portable
 manifest as the sole service inventory:
 
 1. choose a relative workspace root that includes every referenced repository;
-2. represent one-shot infrastructure initialization and final teardown as
+2. declare each service-owning repository with a stable logical name;
+3. represent one-shot infrastructure initialization and final teardown as
    lifecycle commands;
-3. represent continuously supervised shared infrastructure as workspace-owned
+4. represent continuously supervised shared infrastructure as workspace-owned
    services;
-4. represent applications as tab-owned native services;
-5. convert existing workspace startup, shutdown, status, attachment, and
+5. represent applications as tab-owned native services tied to their declared
+   repositories;
+6. convert existing workspace startup, shutdown, status, attachment, and
    Versions entry points into thin Rungrid wrappers;
-6. keep unrelated command-free workspaces outside Rungrid;
-7. retain previous managed-development scripts as inactive rollback material
+7. keep unrelated command-free workspaces outside Rungrid;
+8. retain previous managed-development scripts as inactive rollback material
    for one release cycle;
-8. isolate rollback state, socket, and ownership markers from Rungrid; and
-9. remove legacy active-path documentation only after graphical and headless
+9. isolate rollback state, socket, and ownership markers from Rungrid; and
+10. remove legacy active-path documentation only after graphical and headless
    parity is proven.
 
 `rungrid instructions <project-path>...` produces the neutral coding-agent
@@ -1110,8 +1148,9 @@ examples, release metadata, or this specification.
 
 Rungrid v1 is complete when all of the following are demonstrated:
 
-- schema/default/merge, workspace-root boundary, lifecycle ordering and overlay
-  replacement, path, dependency, trigger, redaction, journal transition,
+- schema/default/merge, workspace-root and declared-repository boundaries,
+  lifecycle ordering and overlay replacement, path, dependency, trigger,
+  redaction, journal transition,
   ownership, atomic write, lock, identity, and exit-code unit and fuzz tests
   pass;
 - generic manifests, Process Compose output, plans, JSON, and ordered Warp files

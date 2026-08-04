@@ -20,6 +20,9 @@
 - The manifest directory and workspace root are distinct. The portable root is
   relative to the manifest, while resolved paths are machine-local and must
   remain inside the symlink-aware workspace boundary.
+- Services may select a declared logical repository within the workspace.
+  Service working directories, Compose files, and environment-provider paths
+  must remain inside that repository's symlink-aware boundary.
 - Subprocesses use argument vectors. User commands, environment values, and
   paths must not be interpolated into shell command strings.
 - Secrets resolve only at execution time and must be redacted from errors,
@@ -102,6 +105,8 @@
   terminal artifacts for a validated manifest.
 - **Workspace root:** the relative manifest declaration whose resolved,
   symlink-aware directory bounds all workspace-owned execution paths.
+- **Repository root:** a stable logical service boundary declared relative to
+  the workspace root; `workspace` is the implicit backward-compatible root.
 - **Lifecycle command:** an ordered one-shot prerequisite or teardown command
   owned by Rungrid rather than Process Compose.
 - **Lifecycle journal:** the crash-safe project record that proves the active

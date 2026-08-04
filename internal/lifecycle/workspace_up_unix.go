@@ -229,7 +229,7 @@ func waitExternalServices(ctx context.Context, loaded *manifest.Loaded) error {
 			continue
 		}
 		waitContext, cancel := context.WithTimeout(ctx, loaded.Manifest.Runtime.StartupTimeout.Duration)
-		err := serviceexec.WaitExternal(waitContext, loaded.WorkspaceRoot, service)
+		err := serviceexec.WaitExternal(waitContext, &loaded.Manifest, loaded.WorkspaceRoot, service)
 		cancel()
 		if err != nil {
 			return err

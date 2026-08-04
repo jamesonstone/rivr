@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-func validateWorkingDirectory(root, directory, field string, add func(string, string)) {
+func validateWorkingDirectory(root, directory, field, scope string, add func(string, string)) {
 	if filepath.IsAbs(directory) {
-		add(field, "must be workspace-relative")
+		add(field, "must be "+scope+"-relative")
 		return
 	}
 	clean := filepath.Clean(directory)
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		add(field, "must remain within the workspace")
+		add(field, "must remain within the "+scope)
 		return
 	}
 	resolved, err := filepath.EvalSymlinks(filepath.Join(root, clean))
@@ -25,7 +25,7 @@ func validateWorkingDirectory(root, directory, field string, add func(string, st
 		return
 	}
 	if !within(root, resolved) {
-		add(field, "resolves outside the workspace")
+		add(field, "resolves outside the "+scope)
 		return
 	}
 	info, err := os.Stat(resolved)
@@ -37,12 +37,12 @@ func validateWorkingDirectory(root, directory, field string, add func(string, st
 func validateCompose(root string, service *Service, prefix string, add func(string, string)) {
 	compose := service.Compose
 	if filepath.IsAbs(compose.File) {
-		add(prefix+".compose.file", "must be workspace-relative")
+		add(prefix+".compose.file", "must be repository-relative")
 	} else {
 		filename := filepath.Join(root, service.WorkingDirectory, compose.File)
 		resolved, err := filepath.EvalSymlinks(filename)
 		if err != nil || !within(root, resolved) {
-			add(prefix+".compose.file", "must name a file within the workspace")
+			add(prefix+".compose.file", "must name a file within the repository")
 		} else if info, statErr := os.Stat(resolved); statErr != nil || info.IsDir() {
 			add(prefix+".compose.file", "must name an existing file")
 		}
@@ -74,6 +74,7 @@ func validateEnvironment(
 	environment Environment,
 	workingDirectory string,
 	prefix string,
+	scope string,
 	add func(string, string),
 ) {
 	for key := range environment.Values {
@@ -88,12 +89,12 @@ func validateEnvironment(
 			if provider.Path == "" {
 				add(field+".path", "is required")
 			} else if filepath.IsAbs(provider.Path) {
-				add(field+".path", "must be workspace-relative")
+				add(field+".path", "must be "+scope+"-relative")
 			} else {
 				candidate := filepath.Join(root, workingDirectory, provider.Path)
 				if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
 					if !within(root, resolved) {
-						add(field+".path", "resolves outside the workspace")
+						add(field+".path", "resolves outside the "+scope)
 					}
 				} else if !provider.Optional {
 					add(field+".path", "must exist unless optional")
@@ -108,7 +109,7 @@ func validateEnvironment(
 			if provider.Directory == "" {
 				add(field+".directory", "is required")
 			} else {
-				validateWorkingDirectory(root, filepath.Join(workingDirectory, provider.Directory), field+".directory", add)
+				validateWorkingDirectory(root, filepath.Join(workingDirectory, provider.Directory), field+".directory", scope, add)
 			}
 		default:
 			add(field+".type", "must be dotenv, command, or direnv")

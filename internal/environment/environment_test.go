@@ -80,7 +80,7 @@ func TestResolveRejectsProviderSymlinkEscapeAtExecutionTime(t *testing.T) {
 		}}},
 	}
 	_, _, err := Resolve(context.Background(), service, root)
-	if err == nil || !strings.Contains(err.Error(), "outside the workspace") {
+	if err == nil || !strings.Contains(err.Error(), "outside the service repository") {
 		t.Fatalf("expected execution-time provider boundary rejection, got %v", err)
 	}
 }

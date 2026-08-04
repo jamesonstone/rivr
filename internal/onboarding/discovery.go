@@ -15,7 +15,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func Discover(root, fromCompose string) ([]Candidate, string, error) {
+func Discover(root, manifestDirectory, fromCompose string) ([]Candidate, string, error) {
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, "", err
+	}
+	manifestDirectory, err = filepath.EvalSymlinks(manifestDirectory)
+	if err != nil {
+		return nil, "", err
+	}
+	if !discoveryPathWithin(root, manifestDirectory) {
+		return nil, "", errs.New(errs.ExitUsage, "RG1310", "manifest directory must remain within the discovery workspace")
+	}
+	repositories := newRepositoryDiscovery(root, manifestDirectory)
 	var candidates []Candidate
 	composeFiles := []string{}
 	if fromCompose != "" {
@@ -31,7 +43,11 @@ func Discover(root, fromCompose string) ([]Candidate, string, error) {
 		if filepath.IsAbs(filename) {
 			return nil, "", errs.New(errs.ExitUsage, "RG1305", "Compose discovery path must be workspace-relative")
 		}
-		content, err := os.ReadFile(filepath.Join(root, filename))
+		absolute, resolveErr := filepath.EvalSymlinks(filepath.Join(root, filename))
+		if resolveErr != nil || !discoveryPathWithin(root, absolute) {
+			return nil, "", errs.New(errs.ExitUsage, "RG1311", "Compose discovery file must remain within the workspace")
+		}
+		content, err := os.ReadFile(absolute)
 		if err != nil {
 			return nil, "", errs.Wrap(errs.ExitUsage, "RG1306", "read Compose discovery file", err)
 		}
@@ -43,13 +59,21 @@ func Discover(root, fromCompose string) ([]Candidate, string, error) {
 		if err := yaml.Unmarshal(content, &document); err != nil {
 			return nil, "", errs.Wrap(errs.ExitUsage, "RG1307", "parse Compose discovery file", err)
 		}
+		context := repositories.context(filepath.Dir(absolute))
+		composeFile, _ := filepath.Rel(filepath.Join(context.root, context.directory), absolute)
 		names := make([]string, 0, len(document.Services))
 		for name := range document.Services {
 			names = append(names, name)
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			candidates = append(candidates, Candidate{Name: uniqueName(candidates, manifest.Slug(name)), Source: "compose", Directory: ".", ComposeFile: filepath.ToSlash(filename), ComposeService: name, Profiles: append([]string(nil), document.Services[name].Profiles...), Confidence: "exact", Evidence: "declared Compose service"})
+			candidates = append(candidates, Candidate{
+				Name: uniqueName(candidates, manifest.Slug(name)), Source: "compose",
+				Repository: context.name, RepositoryPath: context.path, Directory: context.directory,
+				ComposeFile: filepath.ToSlash(composeFile), ComposeService: name,
+				Profiles:   append([]string(nil), document.Services[name].Profiles...),
+				Confidence: "exact", Evidence: "declared Compose service", AutoSelect: true,
+			})
 		}
 	}
 
@@ -64,15 +88,22 @@ func Discover(root, fromCompose string) ([]Candidate, string, error) {
 		}
 	}
 	for _, directory := range directories {
-		argv, confidence, evidence := inferCommand(filepath.Join(root, directory))
+		absolute := filepath.Join(root, directory)
+		argv, confidence, evidence := inferCommand(absolute)
 		if len(argv) == 0 {
 			continue
 		}
-		name := manifest.Slug(filepath.Base(filepath.Join(root, directory)))
+		name := manifest.Slug(filepath.Base(absolute))
 		if directory == "." {
 			name = manifest.Slug(filepath.Base(root))
 		}
-		candidates = append(candidates, Candidate{Name: uniqueName(candidates, name), Source: "native", Directory: filepath.ToSlash(directory), Argv: argv, Confidence: confidence, Evidence: evidence})
+		context := repositories.context(absolute)
+		candidates = append(candidates, Candidate{
+			Name: uniqueName(candidates, name), Source: "native",
+			Repository: context.name, RepositoryPath: context.path, Directory: context.directory,
+			Argv: argv, Confidence: confidence, Evidence: evidence,
+			AutoSelect: context.root == repositories.manifestRoot && confidence == "high",
+		})
 	}
 	hashContent, _ := json.Marshal(candidates)
 	return candidates, state.Hash(hashContent), nil
@@ -104,7 +135,7 @@ func inferCommand(directory string) ([]string, string, string) {
 }
 
 func candidateService(candidate Candidate) manifest.Service {
-	service := manifest.Service{Name: candidate.Name, Source: candidate.Source, WorkingDirectory: candidate.Directory}
+	service := manifest.Service{Name: candidate.Name, Repository: candidate.Repository, Source: candidate.Source, WorkingDirectory: candidate.Directory}
 	if candidate.Source == "compose" {
 		service.Activation = "workspace"
 		service.Compose = &manifest.Compose{File: candidate.ComposeFile, Service: candidate.ComposeService, Profiles: append([]string(nil), candidate.Profiles...)}
@@ -114,6 +145,82 @@ func candidateService(candidate Candidate) manifest.Service {
 		service.Terminal.TriggerArgv = append([]string(nil), candidate.Argv...)
 	}
 	return service
+}
+
+func addCandidate(m *manifest.Manifest, candidate Candidate) {
+	if candidate.Repository != "" && candidate.Repository != manifest.WorkspaceRepository {
+		if m.Repositories == nil {
+			m.Repositories = map[string]manifest.Repository{}
+		}
+		m.Repositories[candidate.Repository] = manifest.Repository{Path: candidate.RepositoryPath}
+	}
+	m.Services = append(m.Services, candidateService(candidate))
+}
+
+type repositoryDiscovery struct {
+	root, manifestRoot string
+	aliasesByPath      map[string]string
+	pathsByAlias       map[string]string
+}
+
+type repositoryContext struct {
+	name, path, root, directory string
+}
+
+func newRepositoryDiscovery(root, manifestDirectory string) *repositoryDiscovery {
+	return &repositoryDiscovery{
+		root: root, manifestRoot: nearestRepositoryRoot(root, manifestDirectory),
+		aliasesByPath: map[string]string{}, pathsByAlias: map[string]string{},
+	}
+}
+
+func (d *repositoryDiscovery) context(directory string) repositoryContext {
+	repositoryRoot := nearestRepositoryRoot(d.root, directory)
+	path, _ := filepath.Rel(d.root, repositoryRoot)
+	workingDirectory, _ := filepath.Rel(repositoryRoot, directory)
+	path = filepath.ToSlash(path)
+	workingDirectory = filepath.ToSlash(workingDirectory)
+	if path == "." {
+		return repositoryContext{name: manifest.WorkspaceRepository, path: ".", root: repositoryRoot, directory: workingDirectory}
+	}
+	name := d.alias(path)
+	return repositoryContext{name: name, path: path, root: repositoryRoot, directory: workingDirectory}
+}
+
+func (d *repositoryDiscovery) alias(path string) string {
+	if name := d.aliasesByPath[path]; name != "" {
+		return name
+	}
+	base := manifest.Slug(filepath.Base(path))
+	if base == "" || base == manifest.WorkspaceRepository {
+		base = "repository"
+	}
+	name := base
+	for suffix := 2; d.pathsByAlias[name] != ""; suffix++ {
+		name = fmt.Sprintf("%s-%d", base, suffix)
+	}
+	d.aliasesByPath[path] = name
+	d.pathsByAlias[name] = path
+	return name
+}
+
+func nearestRepositoryRoot(root, directory string) string {
+	current := directory
+	for discoveryPathWithin(root, current) {
+		if _, err := os.Lstat(filepath.Join(current, ".git")); err == nil {
+			return current
+		}
+		if current == root {
+			break
+		}
+		current = filepath.Dir(current)
+	}
+	return root
+}
+
+func discoveryPathWithin(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }
 
 func uniqueName(candidates []Candidate, base string) string {

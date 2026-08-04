@@ -13,6 +13,11 @@ func Schema() []byte {
     "kind": {"const": "Workspace"},
     "project": {"$ref": "#/$defs/project"},
     "workspace": {"$ref": "#/$defs/workspace"},
+    "repositories": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"},
+      "additionalProperties": {"$ref": "#/$defs/repository"}
+    },
     "imports": {"type": "array", "items": {"type": "string"}},
     "runtime": {"$ref": "#/$defs/runtime"},
     "terminal": {"$ref": "#/$defs/terminal"},
@@ -45,6 +50,12 @@ func Schema() []byte {
       "type": "object",
       "additionalProperties": false,
       "properties": {"root": {"type": "string", "minLength": 1}}
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {"path": {"type": "string", "minLength": 1}}
     },
     "runtime": {
       "type": "object",
@@ -131,6 +142,7 @@ func Schema() []byte {
       "required": ["name", "source"],
       "properties": {
         "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "repository": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
         "source": {"enum": ["native", "compose", "external"]},
         "activation": {"enum": ["workspace", "tab"]},
         "working_directory": {"type": "string"},

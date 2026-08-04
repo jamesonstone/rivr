@@ -6,6 +6,11 @@ project:
   id: example-workspace-k7m4q2
 workspace:
   root: ..
+repositories:
+  api:
+    path: api
+  web:
+    path: web
 runtime:
   startup_timeout: 10s
   shutdown_timeout: 5s
@@ -33,9 +38,10 @@ services:
       command:
         argv: [database-ready, --quiet]
   - name: api
+    repository: api
     source: native
     activation: tab
-    working_directory: api
+    working_directory: .
     run:
       argv: [example-api, serve]
     terminal:
@@ -43,9 +49,10 @@ services:
     depends_on:
       database: running
   - name: web
+    repository: web
     source: native
     activation: tab
-    working_directory: web
+    working_directory: .
     run:
       argv: [example-web, serve]
     terminal:

@@ -93,8 +93,12 @@ func RunShell(ctx context.Context, options ShellOptions) error {
 			return errs.Wrap(errs.ExitFailure, "RG1004", "resolve user zsh configuration directory", err)
 		}
 	}
+	workingDirectory, err := manifest.ServiceWorkingDirectory(options.Manifest, options.Runtime.WorkspaceRoot, service)
+	if err != nil {
+		return err
+	}
 	command := exec.CommandContext(ctx, "zsh", "-i")
-	command.Dir = filepath.Join(options.Runtime.WorkspaceRoot, service.WorkingDirectory)
+	command.Dir = workingDirectory
 	command.Stdin = options.Stdin
 	command.Stdout = options.Stdout
 	command.Stderr = options.Stderr
@@ -191,7 +195,11 @@ func RunTrigger(ctx context.Context, layout state.Layout, runtimeState superviso
 		return errs.New(errs.ExitConflict, "RG1010", "managed shell original PATH is missing")
 	}
 	environmentMap := map[string]string{"PATH": originalPath}
-	executable, err := environment.LookPath(service.Terminal.TriggerArgv[0], filepath.Join(runtimeState.WorkspaceRoot, service.WorkingDirectory), environmentMap)
+	workingDirectory, err := manifest.ServiceWorkingDirectory(m, runtimeState.WorkspaceRoot, service)
+	if err != nil {
+		return err
+	}
+	executable, err := environment.LookPath(service.Terminal.TriggerArgv[0], workingDirectory, environmentMap)
 	if err != nil {
 		return errs.Wrap(errs.ExitDependency, "RG1011", "resolve original trigger executable", err)
 	}

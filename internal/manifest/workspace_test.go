@@ -108,7 +108,7 @@ services:
     run: {argv: [true]}
 `)
 	_, err := Load(filepath.Join(manifestDirectory, ".rungrid.yaml"), "")
-	if err == nil || !strings.Contains(err.Error(), "resolves outside the workspace") {
+	if err == nil || !strings.Contains(err.Error(), "resolves outside the repository") {
 		t.Fatalf("expected symlink boundary rejection, got %v", err)
 	}
 }

@@ -25,11 +25,11 @@ func validateLifecyclePhase(
 		} else {
 			names[command.Name] = index
 		}
-		validateWorkingDirectory(root, command.WorkingDirectory, prefix+".working_directory", add)
+		validateWorkingDirectory(root, command.WorkingDirectory, prefix+".working_directory", "workspace", add)
 		validateArgv(command.Run.Argv, prefix+".run.argv", add)
 		if command.Timeout.Duration <= 0 {
 			add(prefix+".timeout", "must be positive")
 		}
-		validateEnvironment(root, command.Environment, command.WorkingDirectory, prefix+".environment", add)
+		validateEnvironment(root, command.Environment, command.WorkingDirectory, prefix+".environment", "workspace", add)
 	}
 }

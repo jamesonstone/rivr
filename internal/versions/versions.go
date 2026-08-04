@@ -25,15 +25,16 @@ type Snapshot struct {
 }
 
 type ServiceVersion struct {
-	Name     string `json:"name"`
-	State    string `json:"state"`
-	Health   string `json:"health,omitempty"`
-	PID      int    `json:"pid,omitempty"`
-	Ports    []int  `json:"ports"`
-	Branch   string `json:"branch,omitempty"`
-	Commit   string `json:"commit,omitempty"`
-	GitState string `json:"git_state"`
-	Worktree string `json:"worktree,omitempty"`
+	Name       string `json:"name"`
+	Repository string `json:"repository"`
+	State      string `json:"state"`
+	Health     string `json:"health,omitempty"`
+	PID        int    `json:"pid,omitempty"`
+	Ports      []int  `json:"ports"`
+	Branch     string `json:"branch,omitempty"`
+	Commit     string `json:"commit,omitempty"`
+	GitState   string `json:"git_state"`
+	Worktree   string `json:"worktree,omitempty"`
 }
 
 func Capture(ctx context.Context, m *manifest.Manifest, runtimeState supervisor.Runtime, client processcompose.Client) Snapshot {
@@ -55,9 +56,13 @@ func Capture(ctx context.Context, m *manifest.Manifest, runtimeState supervisor.
 		if service.Terminal.IncludeInVersions != nil && !*service.Terminal.IncludeInVersions {
 			continue
 		}
-		item := ServiceVersion{Name: service.Name, State: "unknown", GitState: "unavailable", Ports: append([]int(nil), service.Ports...)}
+		repository := service.Repository
+		if repository == "" {
+			repository = manifest.WorkspaceRepository
+		}
+		item := ServiceVersion{Name: service.Name, Repository: repository, State: "unknown", GitState: "unavailable", Ports: append([]int(nil), service.Ports...)}
 		if service.Source == "external" {
-			if serviceexec.CheckExternal(ctx, runtimeState.WorkspaceRoot, service) == nil {
+			if serviceexec.CheckExternal(ctx, m, runtimeState.WorkspaceRoot, service) == nil {
 				item.State = "external-ready"
 				item.Health = "healthy"
 			} else {
@@ -74,7 +79,9 @@ func Capture(ctx context.Context, m *manifest.Manifest, runtimeState supervisor.
 				}
 			}
 		}
-		item.Branch, item.Commit, item.GitState, item.Worktree = gitVersion(ctx, filepath.Join(runtimeState.WorkspaceRoot, service.WorkingDirectory))
+		if workingDirectory, pathErr := manifest.ServiceWorkingDirectory(m, runtimeState.WorkspaceRoot, service); pathErr == nil {
+			item.Branch, item.Commit, item.GitState, item.Worktree = gitVersion(ctx, workingDirectory)
+		}
 		result.Services = append(result.Services, item)
 	}
 	return result
@@ -82,7 +89,7 @@ func Capture(ctx context.Context, m *manifest.Manifest, runtimeState supervisor.
 
 func WriteHuman(w io.Writer, snapshot Snapshot) {
 	_, _ = fmt.Fprintf(w, "Rungrid Versions  %s  generation %s\n\n", snapshot.CapturedAt, snapshot.Generation)
-	_, _ = fmt.Fprintf(w, "%-18s %-18s %-9s %-7s %-12s %-18s %-10s\n", "SERVICE", "STATE", "HEALTH", "PID", "PORTS", "BRANCH@COMMIT", "GIT")
+	_, _ = fmt.Fprintf(w, "%-18s %-14s %-18s %-9s %-7s %-12s %-18s %-10s\n", "SERVICE", "REPOSITORY", "STATE", "HEALTH", "PID", "PORTS", "BRANCH@COMMIT", "GIT")
 	for _, service := range snapshot.Services {
 		ports := "-"
 		if len(service.Ports) > 0 {
@@ -104,7 +111,7 @@ func WriteHuman(w io.Writer, snapshot Snapshot) {
 		if health == "" {
 			health = "-"
 		}
-		_, _ = fmt.Fprintf(w, "%-18s %-18s %-9s %-7s %-12s %-18s %-10s\n", service.Name, service.State, health, pid, ports, version, service.GitState)
+		_, _ = fmt.Fprintf(w, "%-18s %-14s %-18s %-9s %-7s %-12s %-18s %-10s\n", service.Name, service.Repository, service.State, health, pid, ports, version, service.GitState)
 	}
 }
 

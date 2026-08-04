@@ -66,6 +66,7 @@ func Validate(m *Manifest, root string) error {
 		add("terminal.mode", "must be warp or headless")
 	}
 	validateLifecycle(root, m.Lifecycle, add)
+	repositoryRoots := validateRepositories(root, m.Repositories, add)
 
 	names := make(map[string]int, len(m.Services))
 	for i := range m.Services {
@@ -88,7 +89,17 @@ func Validate(m *Manifest, root string) error {
 		if service.Source == "external" && service.Activation != "workspace" {
 			add(prefix+".activation", "external services must use workspace activation")
 		}
-		validateWorkingDirectory(root, service.WorkingDirectory, prefix+".working_directory", add)
+		repositoryRoot, repositoryOK := repositoryRoots[service.Repository]
+		if !serviceNamePattern.MatchString(service.Repository) {
+			add(prefix+".repository", "must match [a-z][a-z0-9-]*")
+			repositoryOK = false
+		} else if _, declared := m.Repositories[service.Repository]; service.Repository != WorkspaceRepository && !declared {
+			add(prefix+".repository", "references an unknown repository")
+			repositoryOK = false
+		}
+		if repositoryOK {
+			validateWorkingDirectory(repositoryRoot, service.WorkingDirectory, prefix+".working_directory", "repository", add)
+		}
 		blocks := 0
 		if service.Run != nil {
 			blocks++
@@ -112,8 +123,8 @@ func Validate(m *Manifest, root string) error {
 		case "compose":
 			if service.Compose == nil {
 				add(prefix+".compose", "is required for a compose service")
-			} else {
-				validateCompose(root, service, prefix, add)
+			} else if repositoryOK {
+				validateCompose(repositoryRoot, service, prefix, add)
 			}
 		case "external":
 			if service.External == nil {
@@ -128,7 +139,9 @@ func Validate(m *Manifest, root string) error {
 				add(prefix+".terminal.trigger_argv[0]", "must be a simple executable name that can be wrapped by zsh")
 			}
 		}
-		validateEnvironment(root, service.Environment, service.WorkingDirectory, prefix+".environment", add)
+		if repositoryOK {
+			validateEnvironment(repositoryRoot, service.Environment, service.WorkingDirectory, prefix+".environment", "repository", add)
+		}
 		validateHealth(service.Health, prefix+".health", add)
 		if service.Restart.Policy != "no" && service.Restart.Policy != "always" && service.Restart.Policy != "on-failure" {
 			add(prefix+".restart.policy", "must be no, always, or on-failure")

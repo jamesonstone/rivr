@@ -15,7 +15,7 @@ func TestDiscoverComposeAndNativeCommandEvidence(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "compose.yaml"), "services:\n  database:\n    image: example/database\n    profiles: [development]\n")
 	mustWrite(t, filepath.Join(root, "Makefile"), "dev:\n\t@echo running\n")
-	candidates, discoveryHash, err := Discover(root, "")
+	candidates, discoveryHash, err := Discover(root, root, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,8 +119,8 @@ func TestBuildManifestAppliesProfilesEnvironmentDependenciesAndTriggers(t *testi
 	t.Parallel()
 	root := t.TempDir()
 	candidates := []Candidate{
-		{Name: "database", Source: "compose", Directory: ".", ComposeFile: "compose.yaml", ComposeService: "database", Profiles: []string{"development"}, Confidence: "exact"},
-		{Name: "api", Source: "native", Directory: "api", Argv: []string{"make", "dev"}, Confidence: "high"},
+		{Name: "database", Source: "compose", Repository: "workspace", RepositoryPath: ".", Directory: ".", ComposeFile: "compose.yaml", ComposeService: "database", Profiles: []string{"development"}, Confidence: "exact", AutoSelect: true},
+		{Name: "api", Source: "native", Repository: "workspace", RepositoryPath: ".", Directory: "api", Argv: []string{"make", "dev"}, Confidence: "high", AutoSelect: true},
 	}
 	m := newModel(Options{Root: root}, candidates, "hash", "example-k7m4q2")
 	m.input.SetValue("Example")
@@ -194,6 +194,56 @@ func TestNonInteractiveInitDiscoversFromParentWorkspaceRoot(t *testing.T) {
 	}
 	if strings.Contains(string(content), workspace) {
 		t.Fatal("onboarding persisted an absolute workspace path")
+	}
+}
+
+func TestDiscoverAssignsSelectedSiblingRepositories(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	control := filepath.Join(workspace, "control")
+	backend := filepath.Join(workspace, "backend")
+	frontend := filepath.Join(workspace, "frontend")
+	for _, directory := range []string{control, backend, frontend} {
+		if err := os.MkdirAll(filepath.Join(directory, ".git"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite(t, filepath.Join(backend, "Makefile"), "dev:\n\t@echo backend\n")
+	mustWrite(t, filepath.Join(frontend, "Makefile"), "dev:\n\t@echo frontend\n")
+	mustWrite(t, filepath.Join(backend, "compose.yaml"), "services:\n  database:\n    image: example/database\n")
+	candidates, _, err := Discover(workspace, control, "backend/compose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 3 {
+		t.Fatalf("unexpected sibling candidates: %#v", candidates)
+	}
+	byName := map[string]Candidate{}
+	for _, candidate := range candidates {
+		byName[candidate.Name] = candidate
+	}
+	if database := byName["database"]; database.Repository != "backend" || database.RepositoryPath != "backend" || database.ComposeFile != "compose.yaml" || !database.AutoSelect {
+		t.Fatalf("Compose repository context changed: %#v", database)
+	}
+	for _, name := range []string{"backend", "frontend"} {
+		candidate := byName[name]
+		if candidate.Repository != name || candidate.Directory != "." || candidate.AutoSelect {
+			t.Fatalf("sibling native service should require selection: %#v", candidate)
+		}
+	}
+	m := newModel(Options{Root: control, WorkspaceRoot: ".."}, candidates, "hash", "example-k7m4q2")
+	for index := range m.selected {
+		m.selected[index] = true
+	}
+	m.input.SetValue("Example")
+	built := m.buildManifest()
+	if built.Repositories["backend"].Path != "backend" || built.Repositories["frontend"].Path != "frontend" {
+		t.Fatalf("selected repositories were not declared: %#v", built.Repositories)
+	}
+	for _, service := range built.Services {
+		if service.Repository == "" {
+			t.Fatalf("service repository was not preserved: %#v", service)
+		}
 	}
 }
 
