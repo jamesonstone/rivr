@@ -2,7 +2,7 @@
 kit_metadata_version: 1
 artifact: "spec"
 workflow_version: 3
-phase: "implementation"
+phase: "complete"
 feature:
   id: "bounded-evidence-output"
   slug: "bounded-evidence-output"
@@ -143,15 +143,69 @@ directories.
 
 ## DISCOVERIES
 
-- No additional information recorded yet.
+- Keeping the shell wrapper as the signal-facing process required explicit
+  HUP, INT, and TERM forwarding to the temporary helper binary. The helper then
+  owns and terminates the isolated child process group; focused tests prove the
+  shell and helper do not leave descendants behind.
+- A single mutex-protected writer is required for combined stdout/stderr.
+  `os/exec` may call separate stream writers concurrently, so the shared 4 MiB
+  capture primitive must serialize writes while preserving distinct buffers
+  for Process Compose JSON and diagnostics.
+- Every production and test `Output` or `CombinedOutput` call could be replaced
+  without changing interactive commands. `logs --follow`, sessions, and attach
+  already use explicit streaming writers and remain intentionally uncapped.
+- Platform's current `main` added active-worktree service selection after pull
+  request #42 branched. That runtime contract is separate from evidence
+  safety; the consumer harness can be repaired and validated on GH-41 without
+  pretending its existing base conflict is resolved by this incident fix.
 
 ## VALIDATION
 
-- Pending implementation.
+- PASS: focused evidence-runner tests prove success and child-failure exit-code
+  preservation, output written once, terminal output below 1 KiB, handled
+  signals, stable overflow status 74, 32 KiB test-limit enforcement,
+  descendant cleanup, and concurrent immutable run allocation.
+- PASS: `go test ./internal/subprocess` proves separated stdout/stderr,
+  preserved exit status, bounded combined capture, and process termination at
+  the 4 MiB machine-output limit.
+- PASS: repository search finds no remaining Go `Output` or `CombinedOutput`
+  calls. Interactive logs, sessions, and attach retain explicit streams.
+- PASS: `make check`, including formatting, vet, full tests, race tests,
+  sanitization, dependency licenses, native build, and four cross-builds.
+- PASS: `make lint` with zero findings and `make vuln` with no reachable
+  vulnerabilities.
+- PASS: clean-source `tests/end-to-end/local/run.sh` against Process Compose
+  1.120.0. Run `20260804T172043Z-034267` at commit `abaeb92` produced a
+  246-byte `output.txt`, recorded the 64 MiB limit, and left no helper,
+  Rungrid, or Process Compose descendant.
+- PASS: `make release-snapshot` built all four archives from clean commit
+  `abaeb92`.
+- PASS: Platform's focused Python regressions, complete consumer contract
+  validator, and real Process Compose/fake Docker lifecycle passed with an
+  exact `abaeb92` Rungrid binary. Platform run 2 produced bounded local
+  evidence and left no runtime behind.
+- PASS: `git diff --check`, a no-findings working-tree Gitleaks scan, and
+  `kit reconcile --all --output-only`; Kit audited 99 eligible handwritten
+  source/test files with none above 300 physical lines.
 
 ## OUTCOME
 
-- Pending implementation.
+Rungrid evidence output is now written once to an immutable artifact with a
+64 MiB pre-write ceiling. Success, command failure, signals, and overflow
+produce truthful final metadata; overflow and handled signals terminate and
+wait for the complete child process group. Runner terminal output is limited
+to status and the evidence path.
+
+All non-interactive machine and dependency subprocess capture is limited to
+4 MiB while preserving Process Compose stdout/stderr separation, redaction,
+JSON decoding, and existing command error mapping. Interactive streams remain
+unchanged. CI has an explicit 15-minute end-to-end timeout and retains its
+always-upload evidence behavior.
+
+The matching Platform GH-41 consumer repair is implemented and locally
+validated in pull request #42's existing worktree. Its separate base conflict
+with Platform's newer active-worktree runtime contract remains visible and is
+not misrepresented as part of this safety fix.
 
 ## REPOSITORY MEMORY
 
