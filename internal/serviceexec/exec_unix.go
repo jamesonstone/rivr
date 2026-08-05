@@ -89,6 +89,9 @@ func Exec(ctx context.Context, runtimeContext Context, serviceName string) error
 	if err != nil {
 		return errs.Wrap(errs.ExitDependency, "RG707", "resolve service executable", err)
 	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		return errs.Wrap(errs.ExitDependency, "RG718", "enter service working directory", err)
+	}
 	return syscall.Exec(executable, append([]string{argv[0]}, argv[1:]...), envList)
 }
 

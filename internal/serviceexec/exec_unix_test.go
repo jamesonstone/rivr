@@ -5,12 +5,68 @@ package serviceexec
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jamesonstone/rungrid/internal/manifest"
 )
+
+func TestExecUsesConfiguredWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	workingDirectory := filepath.Join(root, "services", "api")
+	if err := os.MkdirAll(workingDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(root, "directory.log")
+	executable := filepath.Join(root, "record-directory")
+	script := "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$PWD\" > \"$RUNGRID_DIR_LOG\"\n"
+	if err := os.WriteFile(executable, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.Command(os.Args[0], "-test.run=TestExecHelperProcess")
+	command.Env = append(os.Environ(),
+		"RUNGRID_EXEC_HELPER=1",
+		"RUNGRID_EXEC_ROOT="+root,
+		"RUNGRID_EXECUTABLE="+executable,
+		"RUNGRID_DIR_LOG="+logPath,
+	)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("service execution helper failed: %v\n%s", err, output)
+	}
+
+	directory, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedDirectory, err := filepath.EvalSymlinks(workingDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(directory)) != resolvedDirectory {
+		t.Fatalf("service ran in %q, want %q", strings.TrimSpace(string(directory)), resolvedDirectory)
+	}
+}
+
+func TestExecHelperProcess(t *testing.T) {
+	if os.Getenv("RUNGRID_EXEC_HELPER") != "1" {
+		return
+	}
+	root := os.Getenv("RUNGRID_EXEC_ROOT")
+	service := manifest.Service{
+		Name:             "api",
+		Source:           "native",
+		WorkingDirectory: filepath.Join("services", "api"),
+		Run:              &manifest.Run{Argv: []string{os.Getenv("RUNGRID_EXECUTABLE")}},
+	}
+	runtimeContext := Context{WorkspaceRoot: root, Manifest: &manifest.Manifest{Services: []manifest.Service{service}}}
+	if err := Exec(context.Background(), runtimeContext, service.Name); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("service execution returned without replacing the helper process")
+}
 
 func TestComposeShutdownUsesExactConfiguredArguments(t *testing.T) {
 	root := t.TempDir()
