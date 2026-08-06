@@ -41,8 +41,10 @@ type ServicePlan struct {
 }
 
 type RepositoryPlan struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
+	Remote        string `json:"remote"`
+	DefaultBranch string `json:"default_branch,omitempty"`
 }
 
 func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
@@ -63,6 +65,8 @@ func Build(loaded *manifest.Loaded, generatorVersion string) Plan {
 			"manifest.yaml",
 			"plan.json",
 			"process-compose.yaml",
+			"wrappers/rungrid-maintenance-sync",
+			"wrappers/rungrid-maintenance-worktrees-prune",
 		},
 		TerminalMode: loaded.Manifest.Terminal.Mode,
 		OpenTerminal: loaded.Manifest.Terminal.Open != nil && *loaded.Manifest.Terminal.Open,
@@ -170,7 +174,11 @@ func (p Plan) WriteHuman(w io.Writer) {
 	p.Lifecycle.writeHuman(w)
 	_, _ = fmt.Fprintln(w, "Repositories:")
 	for _, repository := range p.Repositories {
-		_, _ = fmt.Fprintf(w, "  %-20s %s\n", repository.Name, repository.Path)
+		defaultBranch := repository.DefaultBranch
+		if defaultBranch == "" {
+			defaultBranch = "<remote HEAD>"
+		}
+		_, _ = fmt.Fprintf(w, "  %-20s %-20s remote=%s default=%s\n", repository.Name, repository.Path, repository.Remote, defaultBranch)
 	}
 	_, _ = fmt.Fprintln(w)
 	if p.Recovery != nil {
@@ -206,9 +214,10 @@ func (p Plan) WriteHuman(w io.Writer) {
 }
 
 func repositoryPlans(m *manifest.Manifest) []RepositoryPlan {
-	result := []RepositoryPlan{{Name: manifest.WorkspaceRepository, Path: "."}}
+	result := []RepositoryPlan{{Name: manifest.WorkspaceRepository, Path: ".", Remote: "origin"}}
 	for _, name := range manifest.DeclaredRepositoryNames(m) {
-		result = append(result, RepositoryPlan{Name: name, Path: m.Repositories[name].Path})
+		repository := m.Repositories[name]
+		result = append(result, RepositoryPlan{Name: name, Path: repository.Path, Remote: repository.Remote, DefaultBranch: repository.DefaultBranch})
 	}
 	return result
 }

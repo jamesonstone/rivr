@@ -23,7 +23,8 @@ Warp or a headless shell provides the operator surface.
     └─ Process Compose → lifecycle and logs
          ├─ Overview → read-only TUI and selectable logs
          ├─ Versions → process, ports, and Git state
-         └─ Service tabs → exclusive tab-owned sessions
+         ├─ Service tabs → exclusive tab-owned sessions
+         └─ Maintenance jobs → CLI-authorized sync and prune logs
     │
     ▼
   rungrid down → lifecycle.after_down → ordered teardown
@@ -55,6 +56,10 @@ Observe
   versions       Show process, listener, and source-control state
   status         Report active runtime and service state
   logs           Read Process Compose service logs
+
+Maintain
+  sync           Fast-forward configured repositories' default branches
+  worktrees      Inspect and safely maintain linked Git worktrees
 
 Control
   session        Own a tab service until stop or signal

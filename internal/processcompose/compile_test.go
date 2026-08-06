@@ -37,6 +37,9 @@ func TestCompileMatchesGoldenAndProcessComposeSchema(t *testing.T) {
 	if !strings.Contains(string(compiled.Wrappers["api"]), "internal exec-service --project-id example-workspace-k7m4q2") {
 		t.Fatalf("unexpected api wrapper:\n%s", compiled.Wrappers["api"])
 	}
+	if wrapper := string(compiled.Wrappers["rungrid-maintenance-sync"]); !strings.Contains(wrapper, "internal maintenance-worker") || !strings.Contains(wrapper, "--operation sync") {
+		t.Fatalf("unexpected maintenance wrapper:\n%s", wrapper)
+	}
 	processCompose, err := exec.LookPath("process-compose")
 	if err != nil {
 		t.Skip("Process Compose is not installed")

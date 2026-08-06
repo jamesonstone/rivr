@@ -12,6 +12,9 @@
   authoritative for its lifecycle and logs.
 - One-shot workspace prerequisites and teardown are Rungrid operations. Their
   journal, not Process Compose, is authoritative for ordering and recovery.
+- Repository maintenance is manifest-scoped and fail-closed. Synchronization
+  advances only verified local default branches; worktree removal requires
+  independent Git, GitHub, path, cleanliness, process, and exact-OID proof.
 
 ## CONSTRAINTS
 
@@ -47,6 +50,17 @@
   output is interactive and color is not disabled. Color must never carry
   meaning; redirected and explicitly colorless help remains complete and
   stable.
+- Feature branches and their worktrees are never implicitly checked out,
+  merged, rebased, reset, stopped, or rewritten by repository maintenance.
+  A checked-out default worktree advances only after clean-state and
+  expected-OID revalidation, with exact affected services paused and resumed.
+- Process Compose may present disabled repository-maintenance jobs and their
+  logs, but only a short-lived generation-scoped CLI request authorizes one.
+  The read-only Overview never grants mutation authority.
+- Worktree removal never uses force or direct recursive deletion. It requires
+  a canonical clean inactive lane, one same-repository merged pull request
+  whose head OID equals the worktree HEAD, a deleted remote branch, and no
+  process whose working directory is inside the lane.
 
 ### Kit-Managed Baseline Rules
 
@@ -115,3 +129,7 @@
   service logs.
 - **Versions:** the live service, listener, Git branch, commit, and worktree
   state view.
+- **Repository sync:** a manifest-scoped fetch followed by an expected-state
+  fast-forward of only each local remote-default branch.
+- **Worktree prune:** a confirmed, immediately revalidated, non-force removal
+  of only linked worktrees whose independent safety proofs all succeed.

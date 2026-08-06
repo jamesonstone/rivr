@@ -183,14 +183,22 @@ contributes to project identity.
 repositories:
   api:
     path: services/api
+    remote: origin
   web:
     path: services/web
+    default_branch: trunk
 ```
 
 `repositories` is an optional map of stable logical names to directories
 relative to `workspace.root`. Names match `[a-z][a-z0-9-]*`. Paths must be
 relative, existing, distinct directories within the symlink-resolved workspace
 boundary.
+
+`remote` defaults to `origin` and must be a simple configured Git remote name.
+Rungrid normally discovers the live default branch from that remote's symbolic
+`HEAD`. `default_branch` is an optional fallback for remotes that do not
+advertise a symbolic default; it never causes Rungrid to assume that every
+repository uses `main`.
 
 The reserved implicit repository name `workspace` always identifies
 `workspace.root` and may not be redefined. A local overlay may replace a
@@ -586,6 +594,8 @@ The generated Process Compose configuration:
 - uses the recorded project-scoped Unix socket;
 - emits native and Compose wrappers as exact commands;
 - marks tab-owned processes disabled;
+- emits disabled `maintenance` namespace jobs for authorized repository sync
+  and worktree-prune requests;
 - compiles dependencies, health checks, restart policy, namespaces, and logs;
 - contains no resolved secrets;
 - never generates a process for lifecycle control of an external service.
@@ -738,6 +748,12 @@ recorded Unix socket and generated configuration identity. The attachment is
 read-only: lifecycle keys are disabled. Process selection and log viewing are
 provided by Process Compose.
 
+The generated `maintenance` namespace contains disabled sync and worktree-prune
+jobs. The public CLI writes a short-lived, generation-scoped authorized request
+before starting either job. Starting one through a mutable client without a
+valid request fails closed. Overview therefore displays the same operation
+lifecycle and selectable logs without becoming an authorization surface.
+
 ### 10.2 Versions
 
 Versions runs:
@@ -858,11 +874,12 @@ rungrid doctor [--fix]
 ```
 
 Doctor reports manifest validity, workspace and declared repository path
-boundaries, required executables,
-Process Compose compatibility, Warp/zsh availability when graphical mode is
-selected, lifecycle working directories and executables, state and journal
-permissions, stale runtime or cleanup-required evidence, port conflicts, and
-source-control availability. Doctor does not execute lifecycle commands.
+boundaries, required executables, authenticated GitHub CLI and `lsof`
+availability for worktree proof, Process Compose compatibility, Warp/zsh
+availability when graphical mode is selected, lifecycle working directories
+and executables, state and journal permissions, stale runtime or
+cleanup-required evidence, port conflicts, and source-control availability.
+Doctor does not execute lifecycle commands.
 `--fix` is limited to safe project-owned state repairs and requires
 confirmation for user-visible changes.
 
@@ -947,7 +964,49 @@ Reads logs over the Process Compose client when possible and from verified
 generation logs as fallback. Raw mode is used by sessions and preserves service
 bytes without Rungrid prefixes.
 
-### 11.11 session
+### 11.11 sync
+
+```text
+rungrid sync [--repository <name>]... [--dry-run] [--json]
+```
+
+Queries every unique declared Git common directory, fetches and prunes its
+configured remote, and fast-forwards only the local default branch. A checked
+out default branch must be clean and advances with `git merge --ff-only`; an
+unattached default ref advances only with an expected-old OID. Missing, ahead,
+diverged, dirty, unavailable, or concurrently changed branches are preserved.
+
+Feature branches and their worktrees are never checked out, merged, rebased,
+reset, or stopped. If a running service uses the checked-out default worktree,
+Rungrid cooperatively pauses that exact process, advances the files, and
+resumes it. A tab session retains its generation-scoped ownership throughout.
+`--dry-run` may query the remote but performs no fetch, ref write, state write,
+or process operation.
+
+### 11.12 worktrees prune
+
+```text
+rungrid worktrees prune [--repository <name>]... [--dry-run] [--yes] [--json]
+```
+
+Inspects exact registered linked worktrees once per Git common directory. A
+candidate must be canonical, clean, inactive, non-primary, non-current,
+non-detached, unlocked, absent from the manifest, backed by exactly one
+same-repository pull request merged into the discovered default branch, equal
+to that pull request's head OID, absent from the live remote, and unused as the
+working directory of any live process. Process inspection is fail-closed.
+
+The command previews every decision and requires interactive confirmation.
+Non-interactive execution requires `--yes`. It revalidates each candidate,
+removes only verified expected environment symlinks, runs ordinary non-force
+`git worktree remove` and `git branch -d`, restores links if removal fails, and
+prunes stale metadata. One candidate or repository failure does not block an
+independently proven candidate; any failure still makes the complete command a
+typed partial result. It never uses direct recursive deletion or deletes a
+remote branch. `--dry-run` performs no local Git, state, process, symlink,
+metadata, or filesystem mutation.
+
+### 11.13 session
 
 ```text
 rungrid session <service>
@@ -956,7 +1015,7 @@ rungrid session <service>
 Acquires exclusive tab ownership, starts the service, follows raw logs, and
 stops/releases on ownership-ending signals.
 
-### 11.12 start and stop
+### 11.14 start and stop
 
 ```text
 rungrid start <service>
@@ -965,7 +1024,7 @@ rungrid stop <service>
 
 Perform the activation-aware behavior defined in the lifecycle contract.
 
-### 11.13 down
+### 11.15 down
 
 ```text
 rungrid down [--timeout <duration>]
@@ -975,7 +1034,7 @@ Performs ordered project-owned shutdown. It is idempotent when no verified
 runtime exists only when the lifecycle journal also proves no teardown is
 required. A missing runtime does not suppress required `after_down` commands.
 
-### 11.14 uninstall
+### 11.16 uninstall
 
 ```text
 rungrid uninstall [--keep-logs] [--keep-config]
@@ -990,7 +1049,7 @@ for diagnosis; it does not refer to the source manifest.
 Uninstall refuses to discard a cleanup-required journal. It succeeds only
 after required teardown completes or when no teardown was ever required.
 
-### 11.15 config
+### 11.17 config
 
 ```text
 rungrid config validate
@@ -1002,7 +1061,7 @@ rungrid config path
 `show` is redacted by default. Schema output is stable JSON Schema derived from
 the v1 manifest contract.
 
-### 11.16 completion
+### 11.18 completion
 
 ```text
 rungrid completion bash|zsh|fish
@@ -1010,7 +1069,7 @@ rungrid completion bash|zsh|fish
 
 Writes shell completion to standard output without installing it.
 
-### 11.17 version
+### 11.19 version
 
 ```text
 rungrid version [--json]
@@ -1020,7 +1079,7 @@ Reports semantic version, commit, build time, dirty marker when known, target,
 and supported manifest/output APIs. Release and repository metadata come from
 the build, not a hard-coded owner namespace.
 
-### 11.18 instructions
+### 11.20 instructions
 
 ```text
 rungrid instructions [project-path ...]

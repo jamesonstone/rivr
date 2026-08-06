@@ -12,6 +12,13 @@ import (
 
 const WorkspaceRepository = "workspace"
 
+func RepositoryConfiguration(m *Manifest, name string) Repository {
+	if name == "" || name == WorkspaceRepository {
+		return Repository{Path: ".", Remote: "origin"}
+	}
+	return m.Repositories[name]
+}
+
 func DeclaredRepositoryNames(m *Manifest) []string {
 	names := make([]string, 0, len(m.Repositories))
 	for name := range m.Repositories {
@@ -85,6 +92,14 @@ func validateRepositories(root string, repositories map[string]Repository, add f
 			add(field+".path", "must be workspace-relative")
 			valid = false
 		}
+		if !validRemoteName(repository.Remote) {
+			add(field+".remote", "must be a simple Git remote name")
+			valid = false
+		}
+		if repository.DefaultBranch != "" && !validBranchName(repository.DefaultBranch) {
+			add(field+".default_branch", "must be a valid branch name")
+			valid = false
+		}
 		if !valid {
 			continue
 		}
@@ -101,6 +116,26 @@ func validateRepositories(root string, repositories map[string]Repository, add f
 		resolved[name] = repositoryRoot
 	}
 	return resolved
+}
+
+func validRemoteName(value string) bool {
+	if value == "" || strings.HasPrefix(value, "-") || strings.ContainsAny(value, " /\\\t\r\n") {
+		return false
+	}
+	for _, character := range value {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') &&
+			(character < '0' || character > '9') && !strings.ContainsRune("._-", character) {
+			return false
+		}
+	}
+	return true
+}
+
+func validBranchName(value string) bool {
+	return value != "" && value != "HEAD" && !strings.HasPrefix(value, "-") &&
+		!strings.HasPrefix(value, ".") && !strings.HasSuffix(value, ".") &&
+		!strings.HasSuffix(value, "/") && !strings.Contains(value, "..") &&
+		!strings.Contains(value, "@{") && !strings.ContainsAny(value, " ~^:?*[\\\t\r\n")
 }
 
 func resolveRepositoryPath(root, declared string) (string, error) {

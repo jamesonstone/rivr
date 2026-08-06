@@ -3,24 +3,15 @@
 package session
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
-	"time"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
-	"github.com/jamesonstone/rungrid/internal/manifest"
-	"github.com/jamesonstone/rungrid/internal/processcompose"
 	"github.com/jamesonstone/rungrid/internal/procidentity"
-	"github.com/jamesonstone/rungrid/internal/serviceexec"
 	"github.com/jamesonstone/rungrid/internal/state"
-	"github.com/jamesonstone/rungrid/internal/supervisor"
 )
 
 type Registration struct {
@@ -132,137 +123,4 @@ func Active(layout state.Layout, generationID, service string) (Registration, bo
 		return Registration{}, false
 	}
 	return registration, true
-}
-
-type Options struct {
-	Layout   state.Layout
-	Runtime  supervisor.Runtime
-	Manifest *manifest.Manifest
-	Service  string
-	TabID    string
-	Stdin    io.Reader
-	Stdout   io.Writer
-	Stderr   io.Writer
-}
-
-func Run(ctx context.Context, options Options) (returnErr error) {
-	service, exists := manifest.FindService(options.Manifest, options.Service)
-	if !exists {
-		return errs.New(errs.ExitUsage, "RG808", "unknown service: "+options.Service)
-	}
-	if service.Activation != "tab" || service.Source == "external" {
-		return errs.New(errs.ExitUsage, "RG809", "session requires a tab-owned native or Compose service")
-	}
-	if err := supervisor.Verify(ctx, options.Layout, options.Runtime); err != nil {
-		return err
-	}
-	for dependency := range service.DependsOn {
-		candidate, _ := manifest.FindService(options.Manifest, dependency)
-		if candidate != nil && candidate.Source == "external" {
-			dependencyContext, cancel := context.WithTimeout(ctx, options.Manifest.Runtime.StartupTimeout.Duration)
-			err := serviceexec.WaitExternal(dependencyContext, options.Manifest, options.Runtime.WorkspaceRoot, candidate)
-			cancel()
-			if err != nil {
-				return err
-			}
-		}
-	}
-	lock, err := Acquire(options.Layout, options.Runtime.GenerationID, options.Service, options.TabID)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if releaseErr := lock.Release(); returnErr == nil && releaseErr != nil {
-			returnErr = releaseErr
-		}
-	}()
-
-	client := supervisor.Client(options.Layout, options.Runtime)
-	if current, getErr := client.Get(ctx, options.Service); getErr == nil && isRunning(current.Status) {
-		return errs.New(errs.ExitConflict, "RG810", "tab-owned service is already running without this session")
-	}
-	if err := client.Start(ctx, options.Service); err != nil {
-		return err
-	}
-	owned := true
-	defer func() {
-		if owned {
-			stopContext, cancel := context.WithTimeout(context.Background(), options.Manifest.Runtime.ShutdownTimeout.Duration)
-			_ = client.Stop(stopContext, options.Service)
-			cancel()
-		}
-	}()
-
-	logContext, cancelLogs := context.WithCancel(context.Background())
-	defer cancelLogs()
-	logCommand := client.LogsCommand(logContext, []string{options.Service}, true, -1, true, options.Stdin, options.Stdout, options.Stderr)
-	if err := logCommand.Start(); err != nil {
-		return errs.Wrap(errs.ExitFailure, "RG811", "start service log foreground", err)
-	}
-	logResult := make(chan error, 1)
-	go func() { logResult <- logCommand.Wait() }()
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
-	started := false
-	for {
-		select {
-		case <-ctx.Done():
-			stopContext, cancel := context.WithTimeout(context.Background(), options.Manifest.Runtime.ShutdownTimeout.Duration)
-			_ = client.Stop(stopContext, options.Service)
-			cancel()
-			owned = false
-			cancelLogs()
-			select {
-			case <-logResult:
-			case <-time.After(2 * time.Second):
-				if logCommand.Process != nil {
-					_ = logCommand.Process.Signal(os.Interrupt)
-				}
-			}
-			return errs.Wrap(errs.ExitInterrupted, "RG812", "service session interrupted", ctx.Err())
-		case err := <-logResult:
-			if err != nil && !errors.Is(err, context.Canceled) {
-				return errs.Wrap(errs.ExitFailure, "RG813", "service log foreground ended", err)
-			}
-			return nil
-		case <-ticker.C:
-			current, getErr := client.Get(ctx, options.Service)
-			if getErr != nil {
-				continue
-			}
-			if isRunning(current.Status) {
-				started = true
-				continue
-			}
-			if started || isTerminal(current.Status) {
-				owned = false
-				cancelLogs()
-				select {
-				case <-logResult:
-				case <-time.After(2 * time.Second):
-					if logCommand.Process != nil {
-						_ = logCommand.Process.Signal(os.Interrupt)
-					}
-				}
-				if current.ExitCode != 0 {
-					return errs.New(errs.ExitFailure, "RG814", fmt.Sprintf("service %s exited with code %d", options.Service, current.ExitCode))
-				}
-				return nil
-			}
-		}
-	}
-}
-
-func isRunning(status string) bool {
-	normalized := strings.ToLower(status)
-	return strings.Contains(normalized, "running") || strings.Contains(normalized, "launch") || strings.Contains(normalized, "pending")
-}
-
-func isTerminal(status string) bool {
-	normalized := strings.ToLower(status)
-	return strings.Contains(normalized, "complete") || strings.Contains(normalized, "stopped") || strings.Contains(normalized, "disabled") || strings.Contains(normalized, "error") || strings.Contains(normalized, "skipped")
-}
-
-func ClientFor(options Options) processcompose.Client {
-	return supervisor.Client(options.Layout, options.Runtime)
 }

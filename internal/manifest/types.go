@@ -55,7 +55,9 @@ type Workspace struct {
 }
 
 type Repository struct {
-	Path string `yaml:"path" json:"path"`
+	Path          string `yaml:"path" json:"path"`
+	Remote        string `yaml:"remote,omitempty" json:"remote"`
+	DefaultBranch string `yaml:"default_branch,omitempty" json:"default_branch,omitempty"`
 }
 
 type Lifecycle struct {
@@ -194,6 +196,12 @@ func (m *Manifest) ApplyDefaults() {
 	}
 	if m.Terminal.Open == nil {
 		m.Terminal.Open = Bool(m.Terminal.Mode == "warp")
+	}
+	for name, repository := range m.Repositories {
+		if repository.Remote == "" {
+			repository.Remote = "origin"
+		}
+		m.Repositories[name] = repository
 	}
 	applyLifecycleDefaults(m.Lifecycle.BeforeUp, m.Runtime.StartupTimeout.Duration)
 	applyLifecycleDefaults(m.Lifecycle.AfterDown, m.Runtime.ShutdownTimeout.Duration)

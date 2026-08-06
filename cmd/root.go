@@ -68,6 +68,8 @@ func newRootCommand() *cobra.Command {
 		newVersionsCommand(opt),
 		newStatusCommand(opt),
 		newLogsCommand(opt),
+		newSyncCommand(opt),
+		newWorktreesCommand(opt),
 		newSessionCommand(opt),
 		newStartCommand(opt),
 		newStopCommand(opt),

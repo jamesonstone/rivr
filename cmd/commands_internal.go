@@ -6,6 +6,8 @@ import (
 	"syscall"
 
 	"github.com/jamesonstone/rungrid/internal/errs"
+	"github.com/jamesonstone/rungrid/internal/lifecycle"
+	"github.com/jamesonstone/rungrid/internal/maintenance"
 	"github.com/jamesonstone/rungrid/internal/serviceexec"
 	"github.com/jamesonstone/rungrid/internal/terminalshell"
 	"github.com/spf13/cobra"
@@ -13,8 +15,30 @@ import (
 
 func newInternalCommand(opt *options) *cobra.Command {
 	internal := &cobra.Command{Use: "internal", Hidden: true}
-	internal.AddCommand(newExecServiceCommand(opt, false), newExecServiceCommand(opt, true), newServiceShellCommand(opt), newTriggerCommand(opt))
+	internal.AddCommand(newExecServiceCommand(opt, false), newExecServiceCommand(opt, true), newServiceShellCommand(opt), newTriggerCommand(opt), newMaintenanceWorkerCommand(opt))
 	return internal
+}
+
+func newMaintenanceWorkerCommand(opt *options) *cobra.Command {
+	var projectID, generation, operation string
+	command := &cobra.Command{
+		Use: "maintenance-worker", Hidden: true, Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			if operation != maintenance.OperationSync && operation != maintenance.OperationPrune {
+				return errs.New(errs.ExitUsage, "RG1209", "unknown maintenance operation")
+			}
+			ctx, cancel := signal.NotifyContext(command.Context(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+			defer cancel()
+			return lifecycle.RunMaintenanceWorker(ctx, projectID, generation, operation, opt.stateDir, command.OutOrStdout())
+		},
+	}
+	command.Flags().StringVar(&projectID, "project-id", "", "project id")
+	command.Flags().StringVar(&generation, "generation", "", "generation id")
+	command.Flags().StringVar(&operation, "operation", "", "maintenance operation")
+	_ = command.MarkFlagRequired("project-id")
+	_ = command.MarkFlagRequired("generation")
+	_ = command.MarkFlagRequired("operation")
+	return command
 }
 
 func newExecServiceCommand(opt *options, health bool) *cobra.Command {

@@ -17,6 +17,8 @@ func TestBuildDefaultsToCurrentProject(t *testing.T) {
 		"terminal.trigger_argv",
 		"rungrid init",
 		"rungrid generate --check",
+		"rungrid sync --dry-run",
+		"rungrid worktrees prune --dry-run",
 		"Do not add them to Rungrid source",
 	} {
 		if !strings.Contains(document.Instructions, expected) {
