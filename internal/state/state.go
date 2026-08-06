@@ -77,7 +77,7 @@ func (l Layout) Ensure() error {
 			return err
 		}
 	}
-	for _, component := range []string{"generations", "lifecycle-logs", "sessions", "tabs", "locks"} {
+	for _, component := range []string{"generations", "lifecycle-logs", "sessions", "tabs", "locks", "maintenance"} {
 		if _, err := ensurePrivateChild(l.ProjectDir, component); err != nil {
 			return err
 		}

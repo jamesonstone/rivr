@@ -41,7 +41,7 @@ fi
 	--repository-root "$repository_root" \
 	--evidence-root "$evidence_root" \
 	--output-limit-bytes "$output_limit" \
-	-- go test -run 'Test(Headless|TabOnly)LifecycleEndToEnd' -count=1 -v ./tests/end-to-end/local &
+	-- go test -run 'Test((Headless|TabOnly)Lifecycle|RepositoryMaintenance)EndToEnd' -count=1 -v ./tests/end-to-end/local &
 helper_pid=$!
 set +e
 wait "$helper_pid"

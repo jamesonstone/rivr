@@ -16,6 +16,7 @@ var rootHelpSections = []helpCommandSection{
 	{title: "Configure", commands: []string{"init", "instructions", "doctor", "config"}},
 	{title: "Build & Launch", commands: []string{"plan", "generate", "up", "open"}},
 	{title: "Observe", commands: []string{"attach", "versions", "status", "logs"}},
+	{title: "Maintain", commands: []string{"sync", "worktrees"}},
 	{title: "Control", commands: []string{"session", "start", "stop", "down"}},
 	{title: "Cleanup & Utilities", commands: []string{"uninstall", "completion", "version", "help"}},
 }
@@ -177,6 +178,7 @@ func rootLifecycleDiagram(style helpStyle) string {
 	overview := style.color(ansiOverview, "Overview")
 	versions := style.color(ansiVersions, "Versions")
 	serviceTabs := style.color(ansiService, "Service tabs")
+	maintenance := style.color(ansiPlan, "Maintenance jobs")
 	down := style.color(ansiLifecycle, "rungrid down")
 	afterDown := style.color(ansiLifecycle, "lifecycle.after_down")
 	branch := func(value string) string { return style.color(ansiGray, value) }
@@ -192,7 +194,8 @@ func rootLifecycleDiagram(style helpStyle) string {
 		"    " + branch("└─ ") + runtime + style.muted(" → lifecycle and logs"),
 		"         " + branch("├─ ") + overview + style.muted(" → read-only TUI and selectable logs"),
 		"         " + branch("├─ ") + versions + style.muted(" → process, ports, and Git state"),
-		"         " + branch("└─ ") + serviceTabs + style.muted(" → exclusive tab-owned sessions"),
+		"         " + branch("├─ ") + serviceTabs + style.muted(" → exclusive tab-owned sessions"),
+		"         " + branch("└─ ") + maintenance + style.muted(" → CLI-authorized sync and prune logs"),
 		"    " + rootHelpArrow(style),
 		"  " + down + style.muted(" → ") + afterDown + style.muted(" → ordered teardown"),
 		"",

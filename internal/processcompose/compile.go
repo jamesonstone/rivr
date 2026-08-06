@@ -74,6 +74,28 @@ func Compile(m *manifest.Manifest, generationID string) (Artifacts, error) {
 		processes.Content = append(processes.Content, scalarNode(service.Name), process)
 		result.Wrappers[wrapperName] = wrapperScript(m.Project.ID, generationID, service.Name, false)
 	}
+	for _, operation := range []struct {
+		name      string
+		operation string
+	}{
+		{name: "rungrid-maintenance-sync", operation: "sync"},
+		{name: "rungrid-maintenance-worktrees-prune", operation: "worktrees-prune"},
+	} {
+		process := mappingNode()
+		appendScalar(process, "command", "./wrappers/"+operation.name)
+		appendScalar(process, "working_dir", ".")
+		appendScalar(process, "log_location", "./logs/"+operation.name+".log")
+		appendBool(process, "is_dotenv_disabled", true)
+		appendBool(process, "disabled", true)
+		appendScalar(process, "namespace", "maintenance")
+		availability := mappingNode()
+		appendScalar(availability, "restart", "no")
+		appendInt(availability, "backoff_seconds", 0)
+		appendInt(availability, "max_restarts", 0)
+		process.Content = append(process.Content, scalarNode("availability"), availability)
+		processes.Content = append(processes.Content, scalarNode(operation.name), process)
+		result.Wrappers[operation.name] = maintenanceWrapperScript(m.Project.ID, generationID, operation.operation)
+	}
 
 	document := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
 	var buffer bytes.Buffer
@@ -87,6 +109,10 @@ func Compile(m *manifest.Manifest, generationID string) (Artifacts, error) {
 	}
 	result.Configuration = buffer.Bytes()
 	return result, nil
+}
+
+func maintenanceWrapperScript(projectID, generationID, operation string) []byte {
+	return []byte(fmt.Sprintf("#!/bin/sh\nset -eu\n: \"${RUNGRID_EXECUTABLE:=rungrid}\"\nexec \"$RUNGRID_EXECUTABLE\" internal maintenance-worker --project-id %s --generation %s --operation %s\n", projectID, generationID, operation))
 }
 
 func wrapperScript(projectID, generationID, service string, health bool) []byte {

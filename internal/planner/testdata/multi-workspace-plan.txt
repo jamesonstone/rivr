@@ -1,5 +1,5 @@
 Project: example-workspace-k7m4q2
-Generation: 8aa31583111a35bafc1f
+Generation: 66d007890f1c2b3043bd
 Manifest directory: .
 Workspace root: ..
 Terminal: headless
@@ -12,9 +12,9 @@ Lifecycle:
   failure after prerequisites: stop runtime, then run all after_down commands
 
 Repositories:
-  workspace            .
-  api                  api
-  web                  web
+  workspace            .                    remote=origin default=<remote HEAD>
+  api                  api                  remote=origin default=<remote HEAD>
+  web                  web                  remote=origin default=<remote HEAD>
 
 Recovery: start; no recorded lifecycle generation
 
@@ -27,6 +27,8 @@ Artifacts:
   manifest.yaml
   plan.json
   process-compose.yaml
+  wrappers/rungrid-maintenance-sync
+  wrappers/rungrid-maintenance-worktrees-prune
   wrappers/api
   wrappers/web
 

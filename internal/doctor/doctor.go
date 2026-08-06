@@ -71,6 +71,18 @@ func Run(ctx context.Context, loaded *manifest.Loaded, stateOverride string, fix
 			add(Check{Name: "process-compose", Status: "ok", Summary: "Process Compose is compatible", Detail: version})
 		}
 	}
+	if _, err := exec.LookPath("gh"); err != nil {
+		add(Check{Name: "github-cli", Status: "warning", Summary: "GitHub CLI is unavailable; worktree prune cannot prove merged pull requests"})
+	} else if err := githubCLIAuthentication(ctx); err != nil {
+		add(Check{Name: "github-cli", Status: "warning", Summary: "GitHub CLI authentication for github.com is unavailable; worktree prune cannot prove merged pull requests"})
+	} else {
+		add(Check{Name: "github-cli", Status: "ok", Summary: "GitHub CLI is authenticated for worktree prune proof"})
+	}
+	if _, err := exec.LookPath("lsof"); err != nil {
+		add(Check{Name: "lsof", Status: "warning", Summary: "lsof is unavailable; worktree prune cannot prove that candidates are unused"})
+	} else {
+		add(Check{Name: "lsof", Status: "ok", Summary: "lsof is available for worktree process proof"})
+	}
 
 	required := requiredExecutables(&loaded.Manifest)
 	for _, executable := range required {
@@ -219,6 +231,13 @@ func processComposeVersion(ctx context.Context, executable string) (string, erro
 		}
 	}
 	return "", fmt.Errorf("version line was missing")
+}
+
+func githubCLIAuthentication(ctx context.Context) error {
+	authContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err := subprocess.Run(exec.CommandContext(authContext, "gh", "auth", "status", "--hostname", "github.com"))
+	return err
 }
 
 func lifecycleExecutable(root string, command manifest.LifecycleCommand) error {

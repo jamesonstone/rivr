@@ -112,6 +112,7 @@ func helpTemplate(style helpStyle) string {
 {{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
 
 %s "{{.CommandPath}} [command] --help" for more information about a command.
+{{end}}{{if not .HasAvailableSubCommands}}
 {{end}}`,
 		usageHeader,
 		aliasesHeader,

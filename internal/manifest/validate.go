@@ -75,6 +75,9 @@ func Validate(m *Manifest, root string) error {
 		if !serviceNamePattern.MatchString(service.Name) {
 			add(prefix+".name", "must match [a-z][a-z0-9-]*")
 		}
+		if strings.HasPrefix(service.Name, "rungrid-maintenance-") {
+			add(prefix+".name", "uses a reserved internal process prefix")
+		}
 		if previous, exists := names[service.Name]; exists {
 			add(prefix+".name", fmt.Sprintf("duplicates services[%d]", previous))
 		} else {

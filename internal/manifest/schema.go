@@ -55,7 +55,11 @@ func Schema() []byte {
       "type": "object",
       "additionalProperties": false,
       "required": ["path"],
-      "properties": {"path": {"type": "string", "minLength": 1}}
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "remote": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "default_branch": {"type": "string", "minLength": 1}
+      }
     },
     "runtime": {
       "type": "object",

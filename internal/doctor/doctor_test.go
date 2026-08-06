@@ -16,6 +16,12 @@ func TestDoctorChecksLifecycleExecutableWithoutRunningIt(t *testing.T) {
 	if err := os.WriteFile(processCompose, []byte("#!/bin/sh\nprintf 'Version: v1.120.0\\n'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	githubCLI := filepath.Join(root, "gh")
+	githubArguments := filepath.Join(root, "gh-arguments")
+	if err := os.WriteFile(githubCLI, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$FAKE_GH_ARGUMENTS\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FAKE_GH_ARGUMENTS", githubArguments)
 	hook := filepath.Join(root, "hook")
 	if err := os.WriteFile(hook, []byte("#!/bin/sh\ntouch lifecycle-ran\n"), 0o700); err != nil {
 		t.Fatal(err)
@@ -45,6 +51,10 @@ services: []
 	}
 	if _, err := os.Stat(filepath.Join(root, "lifecycle-ran")); !os.IsNotExist(err) {
 		t.Fatalf("doctor executed lifecycle hook: %v", err)
+	}
+	arguments, err := os.ReadFile(githubArguments)
+	if err != nil || string(arguments) != "auth\nstatus\n--hostname\ngithub.com\n" {
+		t.Fatalf("GitHub authentication arguments = %q, err=%v", arguments, err)
 	}
 }
 

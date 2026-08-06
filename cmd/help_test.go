@@ -104,6 +104,9 @@ func TestSubcommandHelpUsesSharedPresentation(t *testing.T) {
 			t.Errorf("plain subcommand help missing %q", expected)
 		}
 	}
+	if !strings.HasSuffix(colorless, "\n") {
+		t.Fatal("subcommand help must end with a newline")
+	}
 }
 
 func TestEveryVisibleRootCommandIsGroupedOnce(t *testing.T) {

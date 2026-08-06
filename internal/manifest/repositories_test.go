@@ -68,6 +68,35 @@ func TestRepositoryOverlayReplacesPortablePath(t *testing.T) {
 	}
 }
 
+func TestRepositoryGitMetadataDefaultsAndValidation(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	control := filepath.Join(root, "control")
+	mustMkdir(t, control)
+	mustMkdir(t, filepath.Join(root, "api"))
+	manifestPath := filepath.Join(control, ".rungrid.yaml")
+	mustWrite(t, manifestPath, repositoryManifest("api", "."))
+	loaded, err := Load(manifestPath, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loaded.Manifest.Repositories["api"].Remote; got != "origin" {
+		t.Fatalf("repository remote default = %q, want origin", got)
+	}
+	for name, replacement := range map[string]string{
+		"remote": "api: {path: api, remote: --upload-pack}",
+		"branch": "api: {path: api, default_branch: bad..branch}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			content := strings.Replace(repositoryManifest("api", "."), "api: {path: api}", replacement, 1)
+			mustWrite(t, manifestPath, content)
+			if _, err := Load(manifestPath, ""); err == nil {
+				t.Fatal("expected invalid repository Git metadata")
+			}
+		})
+	}
+}
+
 func TestRepositoryValidationRejectsUnsafeDeclarations(t *testing.T) {
 	t.Parallel()
 	for name, setup := range map[string]func(*testing.T, string, string) string{
@@ -85,6 +114,9 @@ func TestRepositoryValidationRejectsUnsafeDeclarations(t *testing.T) {
 		},
 		"unknown-service-reference": func(_ *testing.T, _, _ string) string {
 			return strings.Replace(repositoryManifest("api", "."), "repository: api", "repository: missing", 1)
+		},
+		"reserved-service-name": func(_ *testing.T, _, _ string) string {
+			return strings.Replace(repositoryManifest("api", "."), "- name: api", "- name: rungrid-maintenance-sync", 1)
 		},
 		"service-escape": func(_ *testing.T, _, _ string) string {
 			return repositoryManifest("api", "../web")

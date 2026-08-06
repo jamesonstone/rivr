@@ -27,6 +27,10 @@ Process Compose runtime and, on macOS, an ordered Warp workspace:
 - macOS or Linux for headless use; and
 - Process Compose `>=1.120.0,<2.0.0`.
 
+`rungrid worktrees prune` additionally uses authenticated GitHub CLI metadata
+to prove that a same-repository pull request merged and `lsof` to prove that no
+process has a working directory inside the candidate worktree.
+
 Native and Compose services may add their own executable requirements. Run
 `rungrid doctor` for a redacted, project-specific report.
 
@@ -65,6 +69,28 @@ rungrid session api
 rungrid down
 ```
 
+Keep every configured repository's local default branch current without
+switching or rewriting active feature worktrees:
+
+```sh
+rungrid sync --dry-run
+rungrid sync
+```
+
+Preview and then reclaim clean linked worktrees whose pull requests merged and
+whose remote branches were deleted:
+
+```sh
+rungrid worktrees prune --dry-run
+rungrid worktrees prune
+```
+
+The prune command confirms removals interactively; automation must pass
+`--yes`. Dirty, active, non-canonical, or unverifiable worktrees are preserved
+with an exact reason. When Process Compose is active, authorized maintenance
+appears in the Overview under the `maintenance` namespace with the same
+lifecycle and logs.
+
 Inside a Warp service tab, Ctrl-C stops that tab's service and returns to the
 same managed zsh. Running the configured exact trigger, such as `make dev`,
 restarts it. Other invocations of that executable pass through unchanged.
@@ -83,6 +109,7 @@ workspace:
 repositories:
   api:
     path: api
+    remote: origin
 terminal:
   mode: warp
 lifecycle:
@@ -131,12 +158,15 @@ commands.
 
 The complete product and safety contract is [CLI_SPEC.md](CLI_SPEC.md). Durable
 implementation rationale lives in
-[docs/specs/rungrid-v1/SPEC.md](docs/specs/rungrid-v1/SPEC.md).
+[docs/specs/rungrid-v1/SPEC.md](docs/specs/rungrid-v1/SPEC.md), with repository
+maintenance decisions in
+[docs/specs/repository-maintenance/SPEC.md](docs/specs/repository-maintenance/SPEC.md).
 
 ## Commands
 
 Rungrid v1 provides `init`, `doctor`, `plan`, `generate`, `up`, `open`,
-`attach`, `versions`, `status`, `logs`, `session`, `start`, `stop`, `down`,
+`attach`, `versions`, `status`, `logs`, `sync`, `worktrees prune`, `session`,
+`start`, `stop`, `down`,
 `uninstall`, `config`, `instructions` (alias `agent-start`), `completion`, and
 `version`. Every JSON-capable command uses a `rungrid/output/v1` envelope.
 

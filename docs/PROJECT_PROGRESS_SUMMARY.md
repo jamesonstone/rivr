@@ -24,6 +24,7 @@ before loading broader history.
 | Feature | Source | Highest completed artifact | Status |
 | --- | --- | --- | --- |
 | `rungrid-v1` | `docs/specs/rungrid-v1/SPEC.md` | Integrated implementation on `GH-3` plus locally validated workspace-root and lifecycle extension on `GH-10`. | Ready for pull-request review; graphical smoke, license selection, release publication, and consumer cutover remain gated. |
+| `repository-maintenance` | `docs/specs/repository-maintenance/SPEC.md` | Validated implementation on `GH-20`. | Ready for pull-request review; hosted checks remain. |
 
 ## FEATURE SUMMARIES
 
@@ -42,13 +43,26 @@ before loading broader history.
   consumer migration separately. The protected-history rewrite is excluded.
 - **POINTER**: `docs/specs/rungrid-v1/SPEC.md`
 
+### Repository maintenance
+
+- **STATUS**: review candidate
+- **INTENT**: Safely fast-forward configured repositories' local default
+  branches and reclaim only independently proven obsolete linked worktrees.
+- **IMPLEMENTED**: Manifest-scoped repository metadata, strict dry-run and
+  typed reports, expected-OID synchronization, cooperative service
+  pause/resume, CLI-authorized Process Compose maintenance jobs, exact
+  GitHub/process/worktree removal proof, and real headless lifecycle coverage.
+- **OPEN ITEMS**: Review the ready pull request and observe hosted checks.
+- **POINTER**: `docs/specs/repository-maintenance/SPEC.md`
+
 ## Current implementation
 
 - The Go CLI implements the complete documented command surface, strict
   manifest merge and validation, XDG state, deterministic generation,
   symlink-aware workspace boundaries, lifecycle journaling and recovery,
   Process Compose supervision, exact native and Compose execution, exclusive
-  sessions, Warp/headless presentation, Versions, onboarding, and uninstall.
+  sessions, Warp/headless presentation, Versions, repository maintenance,
+  onboarding, and uninstall.
 - Unit, integration, race, golden, contract, fake-executable, and real
   Process Compose end-to-end suites cover the repository-owned boundaries.
 - GitHub Actions covers code-level gates, verified Process Compose lifecycle
@@ -68,6 +82,8 @@ before loading broader history.
 
 ## Last updated
 
+- 2026-08-06: Implemented and locally validated default-branch synchronization,
+  fail-closed worktree pruning, and service-aware maintenance lifecycle.
 - 2026-08-03: Implemented and locally validated portable workspace roots and
   crash-safe lifecycle hooks; kept consumer adoption as a separate lane.
 - 2026-08-01: Implemented and locally validated the integrated Rungrid v1

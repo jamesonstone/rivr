@@ -44,3 +44,25 @@ processes:
       restart: no
       backoff_seconds: 1
       max_restarts: 0
+  rungrid-maintenance-sync:
+    command: ./wrappers/rungrid-maintenance-sync
+    working_dir: .
+    log_location: ./logs/rungrid-maintenance-sync.log
+    is_dotenv_disabled: true
+    disabled: true
+    namespace: maintenance
+    availability:
+      restart: no
+      backoff_seconds: 0
+      max_restarts: 0
+  rungrid-maintenance-worktrees-prune:
+    command: ./wrappers/rungrid-maintenance-worktrees-prune
+    working_dir: .
+    log_location: ./logs/rungrid-maintenance-worktrees-prune.log
+    is_dotenv_disabled: true
+    disabled: true
+    namespace: maintenance
+    availability:
+      restart: no
+      backoff_seconds: 0
+      max_restarts: 0
