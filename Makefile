@@ -15,7 +15,8 @@ GO_FILES := $(shell find . -type f -name '*.go' -not -path './vendor/*')
 help:
 	@printf '%s\n' 'Rungrid developer workflow'
 	@printf '%s\n' ''
-	@printf '%s\n' '  make build             build and link rungrid into PREFIX/bin'
+	@printf '%s\n' '  make build             compile the rungrid binary into bin/'
+	@printf '%s\n' '  make link              one-time symlink of bin/rungrid into PREFIX/bin'
 	@printf '%s\n' '  make run ARGS="..."    build and run the repository binary'
 	@printf '%s\n' '  make install           install with the active Go toolchain'
 	@printf '%s\n' '  make clean             remove generated build and release output'
@@ -26,7 +27,7 @@ help:
 	@printf '%s\n' '  make license           verify dependency license material'
 	@printf '%s\n' '  make release-snapshot  validate a local GoReleaser snapshot'
 
-build: link
+build: compile
 
 compile:
 	mkdir -p $(BIN_DIR)
